@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>麥味登客服查詢系統</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    
+    header h1 {
+      font-size: 1.5rem;
+      margin-bottom: 5px;
+    }
+    
+    header p {
+      opacity: 0.9;
+      font-size: 0.9rem;
+    }
+    
+    .panel {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .panel h2 {
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .search-form {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .form-group label {
+      font-size: 0.85rem;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    .form-group input, .form-group select {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 1rem;
+      width: 160px;
+    }
+    
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    button {
+      padding: 10px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    button.secondary {
+      background: #6c757d;
+    }
+    
+    button.secondary:hover {
+      box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+    }
+    
+    /* 訂單清單 */
+    .order-list {
+      display: none;
+    }
+    
+    .order-list.active {
+      display: block;
+    }
+    
+    .order-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .order-table th, .order-table td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .order-table th {
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #555;
+      font-size: 0.9rem;
+    }
+    
+    .order-table tr:hover {
+      background: #f8f9fa;
+    }
+    
+    .order-link {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .order-link:hover {
+      text-decoration: underline;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    
+    .badge.store {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+    
+    .badge.token {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    
+    .badge.chid {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    
+    .badge.complete {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .badge.incomplete {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    /* 訂單詳情 */
+    .order-detail {
+      display: none;
+    }
+    
+    .order-detail.active {
+      display: block;
+    }
+    
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    
+    .detail-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+    
+    .detail-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .timeline {
+      position: relative;
+      padding-left: 30px;
+    }
+    
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #e0e0e0;
+    }
+    
+    .timeline-item {
+      position: relative;
+      padding-bottom: 15px;
+    }
+    
+    .timeline-item:last-child {
+      padding-bottom: 0;
+    }
+    
+    .timeline-dot {
+      position: absolute;
+      left: -26px;
+      top: 4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #667eea;
+      border: 2px solid white;
+      box-shadow: 0 0 0 2px #667eea;
+    }
+    
+    .timeline-dot.storer {
+      background: #4caf50;
+      box-shadow: 0 0 0 2px #4caf50;
+    }
+    
+    .timeline-dot.retriever {
+      background: #2196f3;
+      box-shadow: 0 0 0 2px #2196f3;
+    }
+    
+    .timeline-content {
+      background: #f8f9fa;
+      padding: 12px 15px;
+      border-radius: 6px;
+    }
+    
+    .timeline-time {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 5px;
+    }
+    
+    .timeline-event {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    
+    .timeline-event .device {
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      font-weight: 500;
+    }
+    
+    .timeline-event .device.storer {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .timeline-event .device.retriever {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    
+    .timeline-msg {
+      font-size: 0.9rem;
+      color: #666;
+    }
+    
+    .timeline-state {
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 5px;
+    }
+    
+    .no-results, .loading {
+      padding: 40px;
+      text-align: center;
+      color: #888;
+    }
+    
+    .error {
+      padding: 20px;
+      background: #ffebee;
+      color: #c62828;
+      border-radius: 6px;
+    }
+    
+    .stats {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    
+    .stats span {
+      background: #f0f0f0;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    @media (max-width: 768px) {
+      .search-form {
+        flex-direction: column;
+      }
+      .form-group input, .form-group select {
+        width: 100%;
+      }
+      .order-table {
+        font-size: 0.9rem;
+      }
+      .order-table th, .order-table td {
+        padding: 8px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🍱 麥味登客服查詢系統</h1>
+      <p>查詢訂單從存餐到取餐的完整記錄</p>
+    </header>
+    
+    <!-- 搜尋面板 -->
+    <div class="panel">
+      <h2>🔍 訂單查詢</h2>
+      <div class="search-form">
+        <div class="form-group">
+          <label for="storeId">店號</label>
+          <select id="storeId">
+            <option value="">全部店家</option>
+            <option value="vm01">vm01店</option>
+            <option value="vm02">vm02店</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="orderId">Order ID</label>
+          <input type="text" id="orderId" placeholder="訂單編號">
+        </div>
+        <div class="form-group">
+          <label for="token">取餐碼</label>
+          <input type="text" id="token" placeholder="Token">
+        </div>
+        <div class="form-group">
+          <label for="chid">存餐格口</label>
+          <select id="chid">
+            <option value="">全部</option>
+            <option value="1">格口 1</option>
+            <option value="2">格口 2</option>
+            <option value="3">格口 3</option>
+            <option value="4">格口 4</option>
+            <option value="5">格口 5</option>
+            <option value="6">格口 6</option>
+            <option value="7">格口 7</option>
+            <option value="8">格口 8</option>
+            <option value="9">格口 9</option>
+            <option value="10">格口 10</option>
+            <option value="11">格口 11</option>
+            <option value="12">格口 12</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="dateFrom">日期 (從)</label>
+          <input type="date" id="dateFrom">
+          <select id="timeFrom">
+            <option value="0">00:00</option>
+            <option value="6" selected>06:00</option>
+            <option value="7">07:00</option>
+            <option value="8">08:00</option>
+            <option value="9">09:00</option>
+            <option value="10">10:00</option>
+            <option value="11">11:00</option>
+            <option value="12">12:00</option>
+            <option value="13">13:00</option>
+            <option value="14">14:00</option>
+            <option value="15">15:00</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="dateTo">日期 (到)</label>
+          <input type="date" id="dateTo">
+          <select id="timeTo">
+            <option value="6">06:00</option>
+            <option value="7">07:00</option>
+            <option value="8">08:00</option>
+            <option value="9">09:00</option>
+            <option value="10">10:00</option>
+            <option value="11">11:00</option>
+            <option value="12">12:00</option>
+            <option value="13">13:00</option>
+            <option value="14">14:00</option>
+            <option value="15" selected>15:00</option>
+            <option value="23">23:59</option>
+          </select>
+        </div>
+        <button onclick="searchOrders()" id="searchBtn">查詢</button>
+      </div>
+    </div>
+    
+    <!-- 訂單清單 -->
+    <div class="panel order-list" id="orderListPanel">
+      <h2>📋 訂單清單</h2>
+      <div class="stats" id="orderStats"></div>
+      <div id="orderListContent">
+        <div class="no-results">請輸入查詢條件後點擊「查詢」</div>
+      </div>
+    </div>
+    
+    <!-- 訂單詳情 -->
+    <div class="panel order-detail" id="orderDetailPanel">
+      <div class="detail-header">
+        <div>
+          <button class="secondary" onclick="backToList()">← 返回清單</button>
+        </div>
+        <div class="detail-title" id="detailTitle"></div>
+        <div class="detail-meta" id="detailMeta"></div>
+      </div>
+      <h2>⏱️ 操作時間軸</h2>
+      <div id="orderTimeline"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/graphql';
+    let currentOrders = [];
+    
+    // 格式化時間戳（微秒）
+    function formatTimestamp(ts) {
+      const ms = Math.floor(ts / 1000);
+      const date = new Date(ms);
+      return date.toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    
+    function formatDate(ts) {
+      const ms = Math.floor(ts / 1000);
+      const date = new Date(ms);
+      return date.toLocaleString('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    
+    // 日期+時間轉時間戳
+    function dateTimeToTimestamp(dateStr, hour, isEnd = false) {
+      const date = new Date(dateStr);
+      if (isEnd) {
+        date.setHours(parseInt(hour), 59, 59, 999);
+      } else {
+        date.setHours(parseInt(hour), 0, 0, 0);
+      }
+      return date.getTime() * 1000;
+    }
+    
+    // 店號對應設備
+    const STORE_DEVICES = {
+      'vm01': {
+        storer: '0242ac1c0002',
+        retriever: '0242ac1e0008'
+      },
+      'vm02': {
+        storer: '0242ac220002',
+        retriever: '0242ac230008'
+      }
+    };
+    
+    // 裝置名稱
+    function getDeviceName(deviceId) {
+      const devices = {
+        '0242ac1e0008': { name: '取餐機', store: 'vm01', type: 'retriever' },
+        '0242ac1c0002': { name: '存餐機', store: 'vm01', type: 'storer' },
+        '0242ac230008': { name: '取餐機', store: 'vm02', type: 'retriever' },
+        '0242ac220002': { name: '存餐機', store: 'vm02', type: 'storer' }
+      };
+      return devices[deviceId] || { name: deviceId, store: '?', type: 'unknown' };
+    }
+    
+    // 事件說明
+    function getEventDescription(e, arg) {
+      const descriptions = {
+        'store/store_ok': '✅ 存餐完成',
+        'store/start': '📦 開始存餐',
+        'store/storing': '⏳ 存餐中',
+        'dispense/ready': '🔓 準備取餐',
+        'dispense/prod_dispensed': '🍱 取餐完成',
+        'dispense/start': '▶️ 開始取餐流程',
+        'order/start': '📝 訂單開始',
+        'order/hint': '💡 訂單提示',
+        'reader/read': '📖 讀取輸入'
+      };
+      
+      let desc = descriptions[e] || e;
+      if (arg && arg.msg) {
+        desc += ` - ${arg.msg}`;
+      }
+      return desc;
+    }
+    
+    // 搜尋訂單
+    async function searchOrders() {
+      const storeId = document.getElementById('storeId').value;
+      const orderId = document.getElementById('orderId').value.trim();
+      const token = document.getElementById('token').value.trim();
+      const chid = document.getElementById('chid').value;
+      const dateFrom = document.getElementById('dateFrom').value;
+      const timeFrom = document.getElementById('timeFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+      const timeTo = document.getElementById('timeTo').value;
+      
+      if (!storeId && !orderId && !token && !dateFrom && !chid) {
+        alert('請至少輸入一個查詢條件');
+        return;
+      }
+      
+      const listPanel = document.getElementById('orderListPanel');
+      const listContent = document.getElementById('orderListContent');
+      const detailPanel = document.getElementById('orderDetailPanel');
+      
+      listPanel.classList.add('active');
+      detailPanel.classList.remove('active');
+      listContent.innerHTML = '<div class="loading">⏳ 查詢中...</div>';
+      document.getElementById('searchBtn').disabled = true;
+      
+      try {
+        const query = `
+          query SearchOrders($storeId: String, $orderId: String, $token: String, $chid: String, $fromTs: Float, $toTs: Float) {
+            orderList(storeId: $storeId, orderId: $orderId, token: $token, chid: $chid, fromTimestamp: $fromTs, toTimestamp: $toTs, limit: 100) {
+              orderId
+              storeId
+              token
+              chid
+              storeTime
+              dispenseTime
+              isComplete
+            }
+          }
+        `;
+        
+        const variables = {};
+        if (storeId) variables.storeId = storeId;
+        if (orderId) variables.orderId = orderId;
+        if (token) variables.token = token;
+        if (chid) variables.chid = chid;
+        if (dateFrom) variables.fromTs = dateTimeToTimestamp(dateFrom, timeFrom);
+        if (dateTo) variables.toTs = dateTimeToTimestamp(dateTo, timeTo, true);
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables })
+        });
+        
+        const result = await response.json();
+        
+        if (result.errors) {
+          throw new Error(result.errors[0].message);
+        }
+        
+        currentOrders = result.data.orderList || [];
+        renderOrderList();
+        
+      } catch (err) {
+        listContent.innerHTML = `<div class="error">❌ 查詢失敗: ${err.message}</div>`;
+      } finally {
+        document.getElementById('searchBtn').disabled = false;
+      }
+    }
+    
+    // 渲染訂單清單
+    function renderOrderList() {
+      const listContent = document.getElementById('orderListContent');
+      const statsDiv = document.getElementById('orderStats');
+      
+      if (currentOrders.length === 0) {
+        listContent.innerHTML = '<div class="no-results">找不到符合條件的訂單</div>';
+        statsDiv.innerHTML = '';
+        return;
+      }
+      
+      const complete = currentOrders.filter(o => o.isComplete).length;
+      const incomplete = currentOrders.length - complete;
+      
+      statsDiv.innerHTML = `
+        <span>共 ${currentOrders.length} 筆訂單</span>
+        <span>✅ 已取餐: ${complete}</span>
+        <span>⏳ 未取餐: ${incomplete}</span>
+      `;
+      
+      let html = `
+        <table class="order-table">
+          <thead>
+            <tr>
+              <th>店號</th>
+              <th>訂單編號</th>
+              <th>取餐碼</th>
+              <th>格口</th>
+              <th>存餐時間</th>
+              <th>取餐時間</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      currentOrders.forEach(order => {
+        html += `
+          <tr>
+            <td><span class="badge store">${order.storeId || '-'}</span></td>
+            <td><a class="order-link" onclick="showOrderDetail('${order.orderId}')">${order.orderId}</a></td>
+            <td>${order.token ? `<span class="badge token">${order.token}</span>` : '-'}</td>
+            <td>${order.chid ? `<span class="badge chid">${order.chid}</span>` : '-'}</td>
+            <td>${order.storeTime ? formatDate(order.storeTime) : '-'}</td>
+            <td>${order.dispenseTime ? formatDate(order.dispenseTime) : '-'}</td>
+            <td>${order.isComplete 
+              ? '<span class="badge complete">已取餐</span>' 
+              : '<span class="badge incomplete">未取餐</span>'}</td>
+          </tr>
+        `;
+      });
+      
+      html += '</tbody></table>';
+      listContent.innerHTML = html;
+    }
+    
+    // 顯示訂單詳情
+    async function showOrderDetail(orderId) {
+      const listPanel = document.getElementById('orderListPanel');
+      const detailPanel = document.getElementById('orderDetailPanel');
+      const timeline = document.getElementById('orderTimeline');
+      
+      listPanel.classList.remove('active');
+      detailPanel.classList.add('active');
+      timeline.innerHTML = '<div class="loading">⏳ 載入中...</div>';
+      
+      try {
+        const query = `
+          query GetOrderTimeline($orderId: String!) {
+            orderTimeline(orderId: $orderId) {
+              orderId
+              token
+              chid
+              events {
+                timestamp
+                e
+                arg
+                sm
+                trigger
+                st
+                deviceId
+              }
+            }
+          }
+        `;
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables: { orderId } })
+        });
+        
+        const result = await response.json();
+        
+        if (result.errors) {
+          throw new Error(result.errors[0].message);
+        }
+        
+        const order = result.data.orderTimeline[0];
+        
+        if (!order) {
+          timeline.innerHTML = '<div class="no-results">找不到訂單資料</div>';
+          return;
+        }
+        
+        document.getElementById('detailTitle').textContent = `訂單 #${order.orderId}`;
+        document.getElementById('detailMeta').innerHTML = `
+          ${order.token ? `<span class="badge token">取餐碼: ${order.token}</span>` : ''}
+          ${order.chid ? `<span class="badge chid">格口: ${order.chid}</span>` : ''}
+        `;
+        
+        renderTimeline(order.events);
+        
+      } catch (err) {
+        timeline.innerHTML = `<div class="error">❌ 載入失敗: ${err.message}</div>`;
+      }
+    }
+    
+    // 渲染時間軸
+    function renderTimeline(events) {
+      const timeline = document.getElementById('orderTimeline');
+      
+      if (!events || events.length === 0) {
+        timeline.innerHTML = '<div class="no-results">沒有操作記錄</div>';
+        return;
+      }
+      
+      let html = '<div class="timeline">';
+      
+      events.forEach(event => {
+        const device = getDeviceName(event.deviceId);
+        html += `
+          <div class="timeline-item">
+            <div class="timeline-dot ${device.type}"></div>
+            <div class="timeline-content">
+              <div class="timeline-time">${formatTimestamp(event.timestamp)}</div>
+              <div class="timeline-event">
+                ${getEventDescription(event.e, event.arg)}
+                <span class="device ${device.type}">${device.name}</span>
+              </div>
+              <div class="timeline-state">狀態: ${event.st} → ${event.sm}/${event.trigger}</div>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+      timeline.innerHTML = html;
+    }
+    
+    // 返回清單
+    function backToList() {
+      document.getElementById('orderListPanel').classList.add('active');
+      document.getElementById('orderDetailPanel').classList.remove('active');
+    }
+    
+    // 設定預設日期
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = weekAgo.toISOString().split('T')[0];
+    
+    // Enter 鍵搜尋
+    document.querySelectorAll('input').forEach(input => {
+      input.addEventListener('keypress', e => {
+        if (e.key === 'Enter') searchOrders();
+      });
+    });
+    
+    // 初始顯示清單面板
+    document.getElementById('orderListPanel').classList.add('active');
+  </script>
+</body>
+</html>

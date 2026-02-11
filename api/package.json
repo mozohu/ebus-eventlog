@@ -1,0 +1,16 @@
+{
+  "name": "ebus-graphql-api",
+  "version": "1.0.0",
+  "description": "GraphQL API for ebus event logs",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@apollo/server": "^4.10.0",
+    "graphql": "^16.8.1",
+    "mongoose": "^8.1.0"
+  }
+}
