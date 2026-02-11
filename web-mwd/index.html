@@ -399,6 +399,26 @@
       border-radius: 3px;
     }
     
+    .timeline-gap {
+      position: relative;
+      padding: 4px 0 4px 32px;
+      font-size: 0.7rem;
+      color: #999;
+      font-family: monospace;
+    }
+    
+    .timeline-gap::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      background: #ddd;
+      border-radius: 50%;
+      transform: translateY(-50%);
+    }
+    
     .timeline-item {
       position: relative;
       padding-bottom: 18px;
@@ -430,6 +450,11 @@
       box-shadow: 0 0 0 2px var(--mwd-coral);
     }
     
+    .timeline-dot.cabin {
+      background: #FF9800;
+      box-shadow: 0 0 0 2px #FF9800;
+    }
+    
     .timeline-content {
       background: var(--mwd-gray-light);
       padding: 12px 16px;
@@ -443,6 +468,11 @@
 
     .timeline-content.retriever {
       border-left-color: var(--mwd-coral);
+    }
+    
+    .timeline-content.cabin {
+      border-left-color: #FF9800;
+      background: #FFF8E1;
     }
     
     .timeline-time {
@@ -738,18 +768,33 @@
     }
     
     // 裝置名稱
-    function getDeviceName(deviceId) {
+    function getDeviceName(deviceId, sm) {
+      // 格口事件
+      if (sm === 'cabin' || !deviceId) {
+        return { name: '格口', store: '', type: 'cabin' };
+      }
       const devices = {
         '0242ac1e0008': { name: '取餐機', store: 'vm01', type: 'retriever' },
         '0242ac1c0002': { name: '存餐機', store: 'vm01', type: 'storer' },
         '0242ac230008': { name: '取餐機', store: 'vm02', type: 'retriever' },
-        '0242ac220002': { name: '存餐機', store: 'vm02', type: 'storer' }
+        '0242ac220002': { name: '存餐機', store: 'vm02', type: 'storer' },
+        '8c147dd48d02': { name: '存餐機', store: 'test', type: 'storer' },
+        '8c147dd51bfe': { name: '取餐機', store: 'test', type: 'retriever' }
       };
       return devices[deviceId] || { name: deviceId, store: '?', type: 'unknown' };
     }
     
     // 事件說明
     function getEventDescription(e, arg) {
+      // 格口事件 (cabin/XX)
+      if (e.startsWith('cabin/')) {
+        const cabinId = e.split('/')[1];
+        const oldVal = arg?.old ?? '?';
+        const newVal = arg?.new ?? '?';
+        const changes = arg?.changes || '';
+        return `🚪 格口${cabinId} [${oldVal}→${newVal}] ${changes}`;
+      }
+      
       const descriptions = {
         'store/store_ok': '✅ 存餐完成',
         'store/start': '📦 開始存餐',
@@ -757,6 +802,8 @@
         'dispense/ready': '🔓 準備取餐',
         'dispense/prod_dispensed': '🍱 取餐完成',
         'dispense/start': '▶️ 開始取餐流程',
+        'dispose/dispose_ok': '🗑️ 訂單刪除',
+        'dispose/start': '🗑️ 開始刪除',
         'order/start': '📝 訂單開始',
         'order/hint': '💡 訂單提示',
         'reader/read': '📖 讀取輸入'
@@ -810,12 +857,17 @@
         `;
         
         const variables = {};
-        if (storeId) variables.storeId = storeId;
-        if (orderId) variables.orderId = orderId;
-        if (token) variables.token = token;
-        if (chid) variables.chid = chid;
-        if (dateFrom) variables.fromTs = dateTimeToTimestamp(dateFrom, timeFrom);
-        if (dateTo) variables.toTs = dateTimeToTimestamp(dateTo, timeTo, true);
+        
+        // 如果有輸入訂單編號，就只用訂單編號查詢，忽略其他條件
+        if (orderId) {
+          variables.orderId = orderId;
+        } else {
+          if (storeId) variables.storeId = storeId;
+          if (token) variables.token = token;
+          if (chid) variables.chid = chid;
+          if (dateFrom) variables.fromTs = dateTimeToTimestamp(dateFrom, timeFrom);
+          if (dateTo) variables.toTs = dateTimeToTimestamp(dateTo, timeTo, true);
+        }
         
         const response = await fetch(API_URL, {
           method: 'POST',
@@ -957,6 +1009,15 @@
       }
     }
     
+    // 格式化時間差為 HH:MM:SS
+    function formatTimeDiff(diffMs) {
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
     // 渲染時間軸
     function renderTimeline(events) {
       const timeline = document.getElementById('orderTimeline');
@@ -968,8 +1029,10 @@
       
       let html = '<div class="timeline">';
       
-      events.forEach(event => {
-        const device = getDeviceName(event.deviceId);
+      events.forEach((event, index) => {
+        const device = getDeviceName(event.deviceId, event.sm);
+        const isCabin = event.sm === 'cabin';
+        
         html += `
           <div class="timeline-item">
             <div class="timeline-dot ${device.type}"></div>
@@ -977,12 +1040,21 @@
               <div class="timeline-time">${formatTimestamp(event.timestamp)}</div>
               <div class="timeline-event">
                 ${getEventDescription(event.e, event.arg)}
-                <span class="device ${device.type}">${device.name}</span>
+                ${!isCabin ? `<span class="device ${device.type}">${device.name}</span>` : ''}
               </div>
-              <div class="timeline-state">狀態: ${event.st} → ${event.sm}/${event.trigger}</div>
+              ${!isCabin ? `<div class="timeline-state">狀態: ${event.st || '-'} → ${event.sm}/${event.trigger}</div>` : ''}
             </div>
           </div>
         `;
+        
+        // 顯示與下一個事件的時間差
+        if (index < events.length - 1) {
+          const nextEvent = events[index + 1];
+          const diffMs = Math.floor((nextEvent.timestamp - event.timestamp) / 1000); // 微秒轉毫秒
+          if (diffMs > 0) {
+            html += `<div class="timeline-gap">+${formatTimeDiff(diffMs)}</div>`;
+          }
+        }
       });
       
       html += '</div>';

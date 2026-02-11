@@ -376,8 +376,6 @@
           <label for="storeId">店號</label>
           <select id="storeId">
             <option value="">全部店家</option>
-            <option value="vm01">vm01店</option>
-            <option value="vm02">vm02店</option>
           </select>
         </div>
         <div class="form-group">
@@ -508,27 +506,55 @@
       return date.getTime() * 1000;
     }
     
-    // 店號對應設備
-    const STORE_DEVICES = {
-      'vm01': {
-        storer: '0242ac1c0002',
-        retriever: '0242ac1e0008'
-      },
-      'vm02': {
-        storer: '0242ac220002',
-        retriever: '0242ac230008'
+    // 店號對應設備（從 API 載入）
+    let STORE_DEVICES = {};
+    let DEVICE_INFO = {};
+    
+    // 載入店號清單
+    async function loadStores() {
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `{ stores { storeId name storerDeviceId retrieverDeviceId } }`
+          })
+        });
+        const result = await response.json();
+        const stores = result.data.stores;
+        
+        // 更新下拉選單
+        const select = document.getElementById('storeId');
+        stores.forEach(store => {
+          const option = document.createElement('option');
+          option.value = store.storeId;
+          option.textContent = store.name;
+          select.appendChild(option);
+        });
+        
+        // 建立設備對應表
+        STORE_DEVICES = {};
+        DEVICE_INFO = {};
+        stores.forEach(store => {
+          STORE_DEVICES[store.storeId] = {
+            storer: store.storerDeviceId,
+            retriever: store.retrieverDeviceId
+          };
+          if (store.storerDeviceId) {
+            DEVICE_INFO[store.storerDeviceId] = { name: '存餐機', store: store.storeId, type: 'storer' };
+          }
+          if (store.retrieverDeviceId) {
+            DEVICE_INFO[store.retrieverDeviceId] = { name: '取餐機', store: store.storeId, type: 'retriever' };
+          }
+        });
+      } catch (err) {
+        console.error('載入店號失敗:', err);
       }
-    };
+    }
     
     // 裝置名稱
     function getDeviceName(deviceId) {
-      const devices = {
-        '0242ac1e0008': { name: '取餐機', store: 'vm01', type: 'retriever' },
-        '0242ac1c0002': { name: '存餐機', store: 'vm01', type: 'storer' },
-        '0242ac230008': { name: '取餐機', store: 'vm02', type: 'retriever' },
-        '0242ac220002': { name: '存餐機', store: 'vm02', type: 'storer' }
-      };
-      return devices[deviceId] || { name: deviceId, store: '?', type: 'unknown' };
+      return DEVICE_INFO[deviceId] || { name: deviceId, store: '?', type: 'unknown' };
     }
     
     // 事件說明
@@ -795,6 +821,9 @@
     
     // 初始顯示清單面板
     document.getElementById('orderListPanel').classList.add('active');
+    
+    // 載入店號清單
+    loadStores();
   </script>
 </body>
 </html>

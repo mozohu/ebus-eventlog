@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>麥味登系統管理</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    
+    header h1 {
+      font-size: 1.5rem;
+      margin-bottom: 5px;
+    }
+    
+    header p {
+      opacity: 0.9;
+      font-size: 0.9rem;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .tab-btn {
+      padding: 12px 24px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    
+    .tab-btn:hover {
+      background: #f0f0f0;
+    }
+    
+    .tab-btn.active {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: white;
+      border-color: transparent;
+    }
+    
+    .panel {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .panel.active {
+      display: block;
+    }
+    
+    .panel h2 {
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(231, 76, 60, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #95a5a6;
+      color: white;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    
+    th {
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #555;
+    }
+    
+    tr:hover {
+      background: #f8f9fa;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .actions button {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .modal.active {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .modal-header h3 {
+      font-size: 1.2rem;
+      color: #333;
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #999;
+    }
+    
+    .modal-close:hover {
+      color: #333;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #555;
+    }
+    
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #e74c3c;
+      box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+    }
+    
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+    
+    .status {
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      display: none;
+    }
+    
+    .status.success {
+      display: block;
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status.error {
+      display: block;
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+    
+    .device-tag {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #e9ecef;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    
+    .loading::after {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #ddd;
+      border-top-color: #e74c3c;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔧 麥味登系統管理</h1>
+      <p>管理店鋪與設備資訊</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="shops">🏪 店鋪管理</button>
+      <button class="tab-btn" data-tab="devices">📱 設備管理</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <!-- 店鋪管理 -->
+    <div id="shops-panel" class="panel active">
+      <div class="toolbar">
+        <h2>🏪 店鋪清單</h2>
+        <button class="btn btn-primary" onclick="openShopModal()">➕ 新增店鋪</button>
+      </div>
+      <div id="shops-list">
+        <div class="loading">載入中</div>
+      </div>
+    </div>
+
+    <!-- 設備管理 -->
+    <div id="devices-panel" class="panel">
+      <div class="toolbar">
+        <h2>📱 設備清單</h2>
+        <button class="btn btn-primary" onclick="openDeviceModal()">➕ 新增設備</button>
+      </div>
+      <div id="devices-list">
+        <div class="loading">載入中</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 店鋪 Modal -->
+  <div id="shop-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="shop-modal-title">新增店鋪</h3>
+        <button class="modal-close" onclick="closeShopModal()">&times;</button>
+      </div>
+      <form id="shop-form" onsubmit="saveShop(event)">
+        <div class="form-group">
+          <label for="shop-id">店號 *</label>
+          <input type="text" id="shop-id" required placeholder="例: vm01">
+        </div>
+        <div class="form-group">
+          <label for="shop-name">名稱 *</label>
+          <input type="text" id="shop-name" required placeholder="例: 台北信義店">
+        </div>
+        <div class="form-group">
+          <label for="shop-storer">存餐機 Device ID</label>
+          <select id="shop-storer">
+            <option value="">（未指定）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="shop-retriever">取餐機 Device ID</label>
+          <select id="shop-retriever">
+            <option value="">（未指定）</option>
+          </select>
+        </div>
+        <input type="hidden" id="shop-edit-id">
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeShopModal()">取消</button>
+          <button type="submit" class="btn btn-primary">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 設備 Modal -->
+  <div id="device-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>新增設備</h3>
+        <button class="modal-close" onclick="closeDeviceModal()">&times;</button>
+      </div>
+      <form id="device-form" onsubmit="saveDevice(event)">
+        <div class="form-group">
+          <label for="device-id">Device ID *</label>
+          <input type="text" id="device-id" required placeholder="例: 0242ac1c0002">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeDeviceModal()">取消</button>
+          <button type="submit" class="btn btn-primary">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/graphql';
+    
+    let allDevices = [];
+    let allShops = [];
+
+    // Tab 切換
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`${btn.dataset.tab}-panel`).classList.add('active');
+      });
+    });
+
+    // GraphQL 請求
+    async function graphql(query, variables = {}) {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables })
+      });
+      const result = await response.json();
+      if (result.errors) {
+        throw new Error(result.errors[0].message);
+      }
+      return result.data;
+    }
+
+    // 顯示狀態
+    function showStatus(message, type = 'success') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      setTimeout(() => {
+        status.className = 'status';
+      }, 3000);
+    }
+
+    // ===== 店鋪管理 =====
+    async function loadShops() {
+      const container = document.getElementById('shops-list');
+      try {
+        const data = await graphql(`
+          query {
+            allShops {
+              id
+              name
+              storerDeviceId
+              retrieverDeviceId
+            }
+          }
+        `);
+        allShops = data.allShops;
+        
+        if (allShops.length === 0) {
+          container.innerHTML = '<div class="empty">尚無店鋪資料</div>';
+          return;
+        }
+        
+        container.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>店號</th>
+                <th>名稱</th>
+                <th>存餐機</th>
+                <th>取餐機</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allShops.map(shop => `
+                <tr>
+                  <td><strong>${shop.id}</strong></td>
+                  <td>${shop.name}</td>
+                  <td>${shop.storerDeviceId ? `<span class="device-tag">${shop.storerDeviceId}</span>` : '<span style="color:#999">未指定</span>'}</td>
+                  <td>${shop.retrieverDeviceId ? `<span class="device-tag">${shop.retrieverDeviceId}</span>` : '<span style="color:#999">未指定</span>'}</td>
+                  <td class="actions">
+                    <button class="btn btn-secondary" onclick="editShop('${shop.id}')">✏️ 編輯</button>
+                    <button class="btn btn-danger" onclick="deleteShop('${shop.id}')">🗑️ 刪除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div class="status error">載入失敗: ${err.message}</div>`;
+      }
+    }
+
+    function openShopModal(shop = null) {
+      document.getElementById('shop-modal').classList.add('active');
+      document.getElementById('shop-modal-title').textContent = shop ? '編輯店鋪' : '新增店鋪';
+      document.getElementById('shop-id').value = shop?.id || '';
+      document.getElementById('shop-id').disabled = !!shop;
+      document.getElementById('shop-name').value = shop?.name || '';
+      document.getElementById('shop-edit-id').value = shop?.id || '';
+      
+      // 更新設備下拉選單
+      updateDeviceSelects(shop?.storerDeviceId, shop?.retrieverDeviceId);
+    }
+
+    function updateDeviceSelects(storerValue = '', retrieverValue = '') {
+      const storerSelect = document.getElementById('shop-storer');
+      const retrieverSelect = document.getElementById('shop-retriever');
+      const editId = document.getElementById('shop-edit-id').value;
+      
+      // 找出已被使用的設備（排除當前編輯店鋪的設備）
+      const usedDevices = new Set();
+      allShops.forEach(shop => {
+        if (shop.id === editId) return; // 排除當前編輯的店鋪
+        if (shop.storerDeviceId) usedDevices.add(shop.storerDeviceId);
+        if (shop.retrieverDeviceId) usedDevices.add(shop.retrieverDeviceId);
+      });
+      
+      // 可用設備 = 全部設備 - 已被其他店鋪使用的設備
+      const availableDevices = allDevices.filter(d => !usedDevices.has(d.id));
+      
+      // 存餐機選項：可用設備 - 當前選的取餐機（不能選同一個）
+      const currentRetriever = retrieverSelect.value;
+      const storerOptions = availableDevices
+        .filter(d => d.id !== currentRetriever || d.id === storerValue)
+        .map(d => `<option value="${d.id}">${d.id}</option>`).join('');
+      
+      // 取餐機選項：可用設備 - 當前選的存餐機（不能選同一個）
+      const currentStorer = storerSelect.value;
+      const retrieverOptions = availableDevices
+        .filter(d => d.id !== currentStorer || d.id === retrieverValue)
+        .map(d => `<option value="${d.id}">${d.id}</option>`).join('');
+      
+      storerSelect.innerHTML = `<option value="">（未指定）</option>${storerOptions}`;
+      retrieverSelect.innerHTML = `<option value="">（未指定）</option>${retrieverOptions}`;
+      
+      storerSelect.value = storerValue || currentStorer;
+      retrieverSelect.value = retrieverValue || currentRetriever;
+    }
+    
+    // 當選擇變更時，即時更新另一個下拉選單
+    document.getElementById('shop-storer').addEventListener('change', () => {
+      updateDeviceSelects(document.getElementById('shop-storer').value, document.getElementById('shop-retriever').value);
+    });
+    document.getElementById('shop-retriever').addEventListener('change', () => {
+      updateDeviceSelects(document.getElementById('shop-storer').value, document.getElementById('shop-retriever').value);
+    });
+
+    function closeShopModal() {
+      document.getElementById('shop-modal').classList.remove('active');
+      document.getElementById('shop-form').reset();
+      document.getElementById('shop-id').disabled = false;
+    }
+
+    async function saveShop(e) {
+      e.preventDefault();
+      
+      const editId = document.getElementById('shop-edit-id').value;
+      const input = {
+        id: document.getElementById('shop-id').value,
+        name: document.getElementById('shop-name').value,
+        storerDeviceId: document.getElementById('shop-storer').value,
+        retrieverDeviceId: document.getElementById('shop-retriever').value
+      };
+      
+      try {
+        if (editId) {
+          await graphql(`
+            mutation($id: String!, $input: ShopInput!) {
+              updateShop(id: $id, input: $input) { id }
+            }
+          `, { id: editId, input });
+          showStatus('店鋪已更新');
+        } else {
+          await graphql(`
+            mutation($input: ShopInput!) {
+              createShop(input: $input) { id }
+            }
+          `, { input });
+          showStatus('店鋪已新增');
+        }
+        closeShopModal();
+        loadShops();
+      } catch (err) {
+        showStatus(`儲存失敗: ${err.message}`, 'error');
+      }
+    }
+
+    function editShop(id) {
+      const shop = allShops.find(s => s.id === id);
+      if (shop) openShopModal(shop);
+    }
+
+    async function deleteShop(id) {
+      if (!confirm(`確定要刪除店鋪 ${id} 嗎？`)) return;
+      
+      try {
+        await graphql(`
+          mutation($id: String!) {
+            deleteShop(id: $id)
+          }
+        `, { id });
+        showStatus('店鋪已刪除');
+        loadShops();
+      } catch (err) {
+        showStatus(`刪除失敗: ${err.message}`, 'error');
+      }
+    }
+
+    // ===== 設備管理 =====
+    async function loadDevices() {
+      const container = document.getElementById('devices-list');
+      try {
+        const data = await graphql(`
+          query {
+            allDevices {
+              id
+            }
+          }
+        `);
+        allDevices = data.allDevices;
+        
+        if (allDevices.length === 0) {
+          container.innerHTML = '<div class="empty">尚無設備資料</div>';
+          return;
+        }
+        
+        // 找出每個設備被哪些店鋪使用
+        const deviceUsage = {};
+        allShops.forEach(shop => {
+          if (!deviceUsage[shop.storerDeviceId]) deviceUsage[shop.storerDeviceId] = [];
+          if (!deviceUsage[shop.retrieverDeviceId]) deviceUsage[shop.retrieverDeviceId] = [];
+          deviceUsage[shop.storerDeviceId].push(`${shop.id} (存餐機)`);
+          deviceUsage[shop.retrieverDeviceId].push(`${shop.id} (取餐機)`);
+        });
+        
+        container.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>Device ID</th>
+                <th>使用於</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allDevices.map(device => `
+                <tr>
+                  <td><span class="device-tag">${device.id}</span></td>
+                  <td>${(deviceUsage[device.id] || []).join(', ') || '<span style="color:#999">未使用</span>'}</td>
+                  <td class="actions">
+                    <button class="btn btn-danger" onclick="deleteDevice('${device.id}')" ${deviceUsage[device.id]?.length ? 'disabled title="設備使用中，無法刪除"' : ''}>🗑️ 刪除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div class="status error">載入失敗: ${err.message}</div>`;
+      }
+    }
+
+    function openDeviceModal() {
+      document.getElementById('device-modal').classList.add('active');
+    }
+
+    function closeDeviceModal() {
+      document.getElementById('device-modal').classList.remove('active');
+      document.getElementById('device-form').reset();
+    }
+
+    async function saveDevice(e) {
+      e.preventDefault();
+      
+      const input = {
+        id: document.getElementById('device-id').value
+      };
+      
+      try {
+        await graphql(`
+          mutation($input: DeviceInput!) {
+            createDevice(input: $input) { id }
+          }
+        `, { input });
+        showStatus('設備已新增');
+        closeDeviceModal();
+        loadDevices();
+      } catch (err) {
+        showStatus(`儲存失敗: ${err.message}`, 'error');
+      }
+    }
+
+    async function deleteDevice(id) {
+      if (!confirm(`確定要刪除設備 ${id} 嗎？`)) return;
+      
+      try {
+        await graphql(`
+          mutation($id: String!) {
+            deleteDevice(id: $id)
+          }
+        `, { id });
+        showStatus('設備已刪除');
+        loadDevices();
+      } catch (err) {
+        showStatus(`刪除失敗: ${err.message}`, 'error');
+      }
+    }
+
+    // 初始化
+    async function init() {
+      await loadShops();   // 先載入店鋪
+      await loadDevices(); // 再載入設備（需要 allShops 來計算使用狀態）
+    }
+    
+    init();
+  </script>
+</body>
+</html>
