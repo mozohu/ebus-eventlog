@@ -77,11 +77,17 @@ const CABIN_FLAGS = {
   FAULT:           { bit: 7, value: 128, name: '故障' }
 };
 
+// 要屏蔽的狀態 flag（不顯示在時間軸）
+const HIDDEN_FLAGS = ['後門開啟', '故障'];
+
 // 解析 cabin_status 變化，回傳人類可讀的描述
 function parseCabinStatusChange(oldStatus, newStatus) {
   const changes = [];
   
   for (const [key, flag] of Object.entries(CABIN_FLAGS)) {
+    // 跳過屏蔽的狀態
+    if (HIDDEN_FLAGS.includes(flag.name)) continue;
+    
     const wasSet = (oldStatus & flag.value) !== 0;
     const isSet = (newStatus & flag.value) !== 0;
     
@@ -91,12 +97,8 @@ function parseCabinStatusChange(oldStatus, newStatus) {
         desc = isSet ? '感測無物' : '感測有物';
       } else if (flag.name === '前門開啟') {
         desc = isSet ? '前門開啟' : '前門關閉';
-      } else if (flag.name === '後門開啟') {
-        desc = isSet ? '後門開啟' : '後門關閉';
       } else if (flag.name === '殺菌燈亮') {
         desc = isSet ? '殺菌燈亮' : '殺菌燈滅';
-      } else if (flag.name === '故障') {
-        desc = isSet ? '故障' : '正常';
       } else {
         desc = isSet ? flag.name : `非${flag.name}`;
       }
@@ -200,6 +202,15 @@ const typeDefs = `#graphql
       orderId: String!
     ): [OrderTimeline!]!
 
+    # System Logs (系統日誌)
+    systemLogs(
+      storeId: String
+      chid: String
+      fromTimestamp: Float
+      toTimestamp: Float
+      limit: Int
+    ): [SystemLog!]!
+
     # Admin: 店鋪管理
     allShops: [Shop!]!
     shop(id: String!): Shop
@@ -207,6 +218,17 @@ const typeDefs = `#graphql
     # Admin: 設備管理
     allDevices: [Device!]!
     device(id: String!): Device
+  }
+
+  type SystemLog {
+    timestamp: Float!
+    level: String!
+    event: String!
+    message: String
+    deviceId: String
+    storeId: String
+    deviceType: String
+    chid: String
   }
 
   # Admin Types
@@ -364,6 +386,15 @@ function getStoreId(deviceId) {
     if (devices.storer === deviceId || devices.retriever === deviceId) {
       return storeId;
     }
+  }
+  return null;
+}
+
+// 根據 deviceId 反查設備類型
+function getDeviceType(deviceId) {
+  for (const [storeId, devices] of Object.entries(STORE_DEVICES)) {
+    if (devices.storer === deviceId) return '存餐機';
+    if (devices.retriever === deviceId) return '取餐機';
   }
   return null;
 }
@@ -541,6 +572,7 @@ const resolvers = {
       if (events.length === 0) return [];
 
       const storeEvent = events.find(e => e.e === 'store/store_ok');
+      const dispenseReadyEvent = events.find(e => e.e === 'dispense/ready');
       const token = storeEvent?.arg?.token;
       const chid = storeEvent?.arg?.chid?.[0];
 
@@ -555,20 +587,85 @@ const resolvers = {
         deviceId: e.deviceId
       }));
 
-      // 找取餐碼比對成功的事件 (dispense/ready)
-      const dispenseReadyEvent = events.find(e => e.e === 'dispense/ready');
-      
-      if (dispenseReadyEvent && chid) {
-        // 查詢取餐碼比對成功後 30 秒內該格口的 cabin_status 變化
-        const fromTs = dispenseReadyEvent.timestamp;
-        const toTs = fromTs + 30 * 1000000; // 30 秒 (timestamp 是微秒)
+      // 查詢存餐掃碼事件 (store/store_ok 前 10 秒內的 reader/read)
+      if (storeEvent) {
+        const storeReaderEvents = await Trigger.find({
+          deviceId: storeEvent.deviceId,
+          e: 'reader/read',
+          timestamp: { 
+            $gte: storeEvent.timestamp - 10 * 1000000,
+            $lte: storeEvent.timestamp 
+          }
+        }).sort({ timestamp: 1 });
+        
+        for (const evt of storeReaderEvents) {
+          timelineEvents.push({
+            timestamp: evt.timestamp,
+            e: evt.e,
+            arg: evt.arg,
+            sm: evt.sm,
+            trigger: evt.trigger,
+            st: evt.st,
+            deviceId: evt.deviceId
+          });
+        }
+      }
+
+      // 查詢取餐掃碼和認證事件 (dispense/ready 前 5 秒內)
+      if (dispenseReadyEvent) {
+        const dispenseReaderEvents = await Trigger.find({
+          deviceId: dispenseReadyEvent.deviceId,
+          e: { $in: ['reader/read', 'auth/auth_ok'] },
+          timestamp: { 
+            $gte: dispenseReadyEvent.timestamp - 5 * 1000000,
+            $lte: dispenseReadyEvent.timestamp 
+          }
+        }).sort({ timestamp: 1 });
+        
+        for (const evt of dispenseReaderEvents) {
+          timelineEvents.push({
+            timestamp: evt.timestamp,
+            e: evt.e,
+            arg: evt.arg,
+            sm: evt.sm,
+            trigger: evt.trigger,
+            st: evt.st,
+            deviceId: evt.deviceId
+          });
+        }
+      }
+
+      // 先排序一次
+      timelineEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+      // 查詢格口狀態變化
+      if (storeEvent && chid) {
         const cabinId = chid.toString().padStart(2, '0'); // 格口號補零，如 '7' -> '07'
         
-        const cabinStatusEvents = await Transition.find({
-          deviceId: dispenseReadyEvent.deviceId,
+        // 找結束事件：取餐完成 or 訂單刪除
+        const dispenseEvent = events.find(e => e.e === 'dispense/prod_dispensed');
+        const disposeEvent = events.find(e => e.e === 'dispose/dispose_ok');
+        const endEvent = dispenseEvent || disposeEvent;
+        
+        let fromTs, toTs;
+        
+        if (endEvent) {
+          // 已取餐或已刪除：從存餐前30秒到結束事件後30秒
+          fromTs = storeEvent.timestamp - 30 * 1000000; // 存餐前 30 秒
+          toTs = endEvent.timestamp + 30 * 1000000; // 結束後 30 秒
+        } else {
+          // 尚未取餐：從存餐前30秒到現在
+          fromTs = storeEvent.timestamp - 30 * 1000000; // 存餐前 30 秒
+          toTs = Date.now() * 1000; // 現在時間（轉微秒）
+        }
+        
+        // 查詢該格口的 cabin_status 變化
+        const cabinStatusQuery = {
           'arg.cabin_status': { $exists: true },
           timestamp: { $gte: fromTs, $lte: toTs }
-        }).sort({ timestamp: 1 });
+        };
+        
+        const cabinStatusEvents = await Transition.find(cabinStatusQuery).sort({ timestamp: 1 });
         
         // 篩選出該格口的狀態變化並加入時間軸（只取 before_hint，避免重複）
         for (const csEvent of cabinStatusEvents) {
@@ -578,6 +675,9 @@ const resolvers = {
           if (cabinStatus && cabinStatus[cabinId]) {
             const [oldStatus, newStatus] = cabinStatus[cabinId];
             const summary = cabinStatusSummary(oldStatus, newStatus);
+            
+            // 如果只有被屏蔽的狀態變化，就不加入時間軸
+            if (summary === '無變化') continue;
             
             timelineEvents.push({
               timestamp: csEvent.timestamp,
@@ -614,6 +714,165 @@ const resolvers = {
     // Admin: 設備查詢
     allDevices: async () => Device.find({}).sort({ id: 1 }),
     device: async (_, { id }) => Device.findOne({ id }),
+
+    // System Logs - 系統日誌查詢
+    systemLogs: async (_, args) => {
+      const limit = args.limit || 200;
+      const logs = [];
+      
+      // 建立時間範圍查詢
+      const timeQuery = {};
+      if (args.fromTimestamp) timeQuery.$gte = args.fromTimestamp;
+      if (args.toTimestamp) timeQuery.$lte = args.toTimestamp;
+      
+      // 建立設備篩選
+      let deviceIds = null;
+      if (args.storeId && STORE_DEVICES[args.storeId]) {
+        deviceIds = [
+          STORE_DEVICES[args.storeId].storer,
+          STORE_DEVICES[args.storeId].retriever
+        ].filter(Boolean);
+      }
+      
+      // 格口號補零
+      const cabinId = args.chid ? args.chid.toString().padStart(2, '0') : null;
+      
+      // 1. 查詢格口故障事件 (cabin_status 包含 128)
+      const faultQuery = {
+        'arg.cabin_status': { $exists: true },
+        transition: 'before_hint'
+      };
+      if (Object.keys(timeQuery).length > 0) faultQuery.timestamp = timeQuery;
+      if (deviceIds) faultQuery.deviceId = { $in: deviceIds };
+      
+      const faultEvents = await Transition.find(faultQuery).sort({ timestamp: -1 }).limit(500);
+      for (const evt of faultEvents) {
+        const cabinStatus = evt.arg?.cabin_status || {};
+        for (const [cid, values] of Object.entries(cabinStatus)) {
+          if (cabinId && cid !== cabinId) continue; // 格口篩選
+          
+          const [oldVal, newVal] = values;
+          // 檢查是否進入故障狀態 (bit 7 = 128)
+          const wasFault = (oldVal & 128) !== 0;
+          const isFault = (newVal & 128) !== 0;
+          
+          if (!wasFault && isFault) {
+            logs.push({
+              timestamp: evt.timestamp,
+              level: 'error',
+              event: '格口故障',
+              message: `格口 ${cid} 進入故障狀態`,
+              deviceId: evt.deviceId,
+              storeId: getStoreId(evt.deviceId),
+              deviceType: '格口',
+              chid: cid
+            });
+          } else if (wasFault && !isFault) {
+            logs.push({
+              timestamp: evt.timestamp,
+              level: 'success',
+              event: '故障恢復',
+              message: `格口 ${cid} 故障已恢復`,
+              deviceId: evt.deviceId,
+              storeId: getStoreId(evt.deviceId),
+              deviceType: '格口',
+              chid: cid
+            });
+          }
+        }
+      }
+      
+      // 3. 查詢訂單刪除（可能是餐點過期）
+      const disposeQuery = {
+        e: 'dispose/dispose_ok'
+      };
+      if (Object.keys(timeQuery).length > 0) disposeQuery.timestamp = timeQuery;
+      if (deviceIds) disposeQuery.deviceId = { $in: deviceIds };
+      
+      const disposeEvents = await Trigger.find(disposeQuery).sort({ timestamp: -1 }).limit(50);
+      for (const evt of disposeEvents) {
+        const chidVal = evt.arg?.chid?.[0];
+        if (cabinId && chidVal?.toString().padStart(2, '0') !== cabinId) continue;
+        
+        logs.push({
+          timestamp: evt.timestamp,
+          level: 'warn',
+          event: '訂單刪除',
+          message: `格口 ${chidVal} 訂單已刪除`,
+          deviceId: evt.deviceId,
+          storeId: getStoreId(evt.deviceId),
+          deviceType: getDeviceType(evt.deviceId),
+          chid: chidVal?.toString().padStart(2, '0')
+        });
+      }
+      
+      // 4. 查詢互動閒置 (sess/timeout)
+      const timeoutQuery = {
+        e: 'sess/timeout'
+      };
+      if (Object.keys(timeQuery).length > 0) timeoutQuery.timestamp = timeQuery;
+      if (deviceIds) timeoutQuery.deviceId = { $in: deviceIds };
+      
+      const timeoutEvents = await Trigger.find(timeoutQuery).sort({ timestamp: -1 }).limit(50);
+      for (const evt of timeoutEvents) {
+        logs.push({
+          timestamp: evt.timestamp,
+          level: 'info',
+          event: '互動閒置',
+          message: null,
+          deviceId: evt.deviceId,
+          storeId: getStoreId(evt.deviceId),
+          deviceType: getDeviceType(evt.deviceId),
+          chid: null
+        });
+      }
+      
+      // 5. 查詢互動開始 (sess/session_begin)
+      const sessionBeginQuery = {
+        e: 'sess/session_begin'
+      };
+      if (Object.keys(timeQuery).length > 0) sessionBeginQuery.timestamp = timeQuery;
+      if (deviceIds) sessionBeginQuery.deviceId = { $in: deviceIds };
+      
+      const sessionBeginEvents = await Trigger.find(sessionBeginQuery).sort({ timestamp: -1 }).limit(50);
+      for (const evt of sessionBeginEvents) {
+        logs.push({
+          timestamp: evt.timestamp,
+          level: 'info',
+          event: '互動開始',
+          message: null,
+          deviceId: evt.deviceId,
+          storeId: getStoreId(evt.deviceId),
+          deviceType: getDeviceType(evt.deviceId),
+          chid: null
+        });
+      }
+      
+      // 6. 查詢開機完成 (sys/sys_op)
+      const sysOpQuery = {
+        e: 'sys/sys_op'
+      };
+      if (Object.keys(timeQuery).length > 0) sysOpQuery.timestamp = timeQuery;
+      if (deviceIds) sysOpQuery.deviceId = { $in: deviceIds };
+      
+      const sysOpEvents = await Trigger.find(sysOpQuery).sort({ timestamp: -1 }).limit(50);
+      for (const evt of sysOpEvents) {
+        logs.push({
+          timestamp: evt.timestamp,
+          level: 'success',
+          event: '開機完成',
+          message: null,
+          deviceId: evt.deviceId,
+          storeId: getStoreId(evt.deviceId),
+          deviceType: getDeviceType(evt.deviceId),
+          chid: null
+        });
+      }
+      
+      // 按時間排序並限制數量
+      logs.sort((a, b) => b.timestamp - a.timestamp);
+      return logs.slice(0, limit);
+    },
   },
 
   Mutation: {

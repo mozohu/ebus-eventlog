@@ -584,6 +584,94 @@
     .result-card.active {
       animation: fadeIn 0.3s ease;
     }
+
+    /* 頁籤樣式 */
+    .main-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 0;
+    }
+
+    .main-tab {
+      padding: 12px 24px;
+      background: #ddd;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      font-family: inherit;
+      transition: all 0.2s;
+      color: var(--mwd-gray);
+    }
+
+    .main-tab:hover {
+      background: #ccc;
+    }
+
+    .main-tab.active {
+      background: var(--mwd-white);
+      color: var(--mwd-green);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* 系統日誌表格 */
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .log-table th, .log-table td {
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid #F0F0F0;
+    }
+
+    .log-table th {
+      background: #FAFAFA;
+      font-weight: 600;
+      color: var(--mwd-gray);
+      font-size: 0.8rem;
+    }
+
+    .log-table tr:hover {
+      background: #FAFAFA;
+    }
+
+    .log-level {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .log-level.error {
+      background: #FFEBEE;
+      color: var(--mwd-coral);
+    }
+
+    .log-level.warn {
+      background: #FFF8E1;
+      color: #F57C00;
+    }
+
+    .log-level.info {
+      background: #E3F2FD;
+      color: #1565C0;
+    }
+
+    .log-level.success {
+      background: var(--mwd-green-bg);
+      color: var(--mwd-green);
+    }
   </style>
 </head>
 <body>
@@ -603,14 +691,17 @@
   </nav>
 
   <div class="container">
-    <!-- 搜尋卡片 -->
-    <div class="search-card">
-      <div class="search-header">
-        <span>🔍</span>
-        <h2>訂單查詢</h2>
-      </div>
-      <div class="search-body">
-        <div class="search-form">
+    <!-- 主頁籤 -->
+    <div class="main-tabs">
+      <button class="main-tab active" onclick="switchMainTab('order')">📋 訂單查詢</button>
+      <button class="main-tab" onclick="switchMainTab('syslog')">📊 系統日誌</button>
+    </div>
+
+    <!-- 訂單查詢頁籤 -->
+    <div id="orderTab" class="tab-content active">
+      <div class="search-card" style="border-radius: 0 12px 12px 12px;">
+        <div class="search-body">
+          <div class="search-form">
           <div class="form-group">
             <label for="storeId">店號</label>
             <select id="storeId">
@@ -702,9 +793,72 @@
       </div>
       <div class="result-header">
         <h2>⏱️ 操作時間軸</h2>
+        <button class="btn btn-primary" onclick="refreshOrderDetail()" id="refreshBtn">🔄 刷新</button>
       </div>
       <div class="timeline-container" id="orderTimeline"></div>
     </div>
+    </div><!-- end orderTab -->
+
+    <!-- 系統日誌頁籤 -->
+    <div id="syslogTab" class="tab-content">
+      <div class="search-card" style="border-radius: 0 12px 12px 12px;">
+        <div class="search-body">
+          <div class="search-form">
+            <div class="form-group">
+              <label for="logStoreId">店號</label>
+              <select id="logStoreId">
+                <option value="">全部店家</option>
+                <option value="vm01">vm01店</option>
+                <option value="vm02">vm02店</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="logChid">格口</label>
+              <select id="logChid">
+                <option value="">全部格口</option>
+                <option value="1">格口 1</option>
+                <option value="2">格口 2</option>
+                <option value="3">格口 3</option>
+                <option value="4">格口 4</option>
+                <option value="5">格口 5</option>
+                <option value="6">格口 6</option>
+                <option value="7">格口 7</option>
+                <option value="8">格口 8</option>
+                <option value="9">格口 9</option>
+                <option value="10">格口 10</option>
+                <option value="11">格口 11</option>
+                <option value="12">格口 12</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="logDateFrom">開始日期</label>
+              <input type="date" id="logDateFrom">
+            </div>
+            <div class="form-group">
+              <label for="logDateTo">結束日期</label>
+              <input type="date" id="logDateTo">
+            </div>
+            <div class="form-group">
+              <label>&nbsp;</label>
+              <button class="btn btn-primary" onclick="searchSysLogs()" id="logSearchBtn">
+                🔍 查詢
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系統日誌結果 -->
+      <div class="result-card active" id="syslogResultPanel">
+        <div class="result-header">
+          <h2>📊 系統日誌</h2>
+          <div class="stats-bar" id="logStats"></div>
+        </div>
+        <div class="result-body" id="syslogContent">
+          <div class="message">請選擇查詢條件後點擊「查詢」</div>
+        </div>
+      </div>
+    </div><!-- end syslogTab -->
   </div>
 
   <footer class="footer">
@@ -714,6 +868,7 @@
   <script>
     const API_URL = '/graphql';
     let currentOrders = [];
+    let currentOrderId = null;
 
     // 更新時間
     function updateTime() {
@@ -806,12 +961,23 @@
         'dispose/start': '🗑️ 開始刪除',
         'order/start': '📝 訂單開始',
         'order/hint': '💡 訂單提示',
-        'reader/read': '📖 讀取輸入'
+        'reader/read': '📷 掃碼輸入',
+        'auth/auth_ok': '✅ 取餐碼正確'
       };
       
       let desc = descriptions[e] || e;
       if (arg && arg.msg) {
         desc += ` - ${arg.msg}`;
+      }
+      // 顯示掃碼內容
+      if (e === 'reader/read' && arg && arg.data) {
+        const data = arg.data.trim().substring(0, 30); // 最多顯示30字元
+        desc += ` - ${data}${arg.data.trim().length > 30 ? '...' : ''}`;
+      }
+      // 顯示取餐碼驗證的 token
+      if (e === 'auth/auth_ok' && arg && arg.token) {
+        const token = arg.token.trim().substring(0, 30);
+        desc += ` - ${token}${arg.token.trim().length > 30 ? '...' : ''}`;
       }
       return desc;
     }
@@ -947,8 +1113,16 @@
       listContent.innerHTML = html;
     }
     
+    // 刷新訂單詳情
+    function refreshOrderDetail() {
+      if (currentOrderId) {
+        showOrderDetail(currentOrderId);
+      }
+    }
+    
     // 顯示訂單詳情
     async function showOrderDetail(orderId) {
+      currentOrderId = orderId;
       const listPanel = document.getElementById('orderListPanel');
       const detailPanel = document.getElementById('orderDetailPanel');
       const timeline = document.getElementById('orderTimeline');
@@ -1084,6 +1258,145 @@
     
     // 初始顯示清單面板
     document.getElementById('orderListPanel').classList.add('active');
+
+    // ===== 頁籤切換 =====
+    function switchMainTab(tabName) {
+      // 更新頁籤按鈕狀態
+      document.querySelectorAll('.main-tab').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.main-tab[onclick="switchMainTab('${tabName}')"]`).classList.add('active');
+      
+      // 顯示對應內容
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      document.getElementById(tabName + 'Tab').classList.add('active');
+    }
+
+    // ===== 系統日誌查詢 =====
+    async function searchSysLogs() {
+      const storeId = document.getElementById('logStoreId').value;
+      const chid = document.getElementById('logChid').value;
+      const dateFrom = document.getElementById('logDateFrom').value;
+      const dateTo = document.getElementById('logDateTo').value;
+      
+      if (!dateFrom && !dateTo) {
+        alert('請選擇日期範圍');
+        return;
+      }
+      
+      const content = document.getElementById('syslogContent');
+      content.innerHTML = '<div class="message loading">⏳ 查詢中...</div>';
+      document.getElementById('logSearchBtn').disabled = true;
+      
+      try {
+        const query = `
+          query SearchSysLogs($storeId: String, $chid: String, $fromTs: Float, $toTs: Float) {
+            systemLogs(storeId: $storeId, chid: $chid, fromTimestamp: $fromTs, toTimestamp: $toTs, limit: 200) {
+              timestamp
+              level
+              event
+              message
+              storeId
+              deviceType
+              chid
+            }
+          }
+        `;
+        
+        const variables = {};
+        if (storeId) variables.storeId = storeId;
+        if (chid) variables.chid = chid;
+        if (dateFrom) {
+          const d = new Date(dateFrom);
+          d.setHours(0, 0, 0, 0);
+          variables.fromTs = d.getTime() * 1000;
+        }
+        if (dateTo) {
+          const d = new Date(dateTo);
+          d.setHours(23, 59, 59, 999);
+          variables.toTs = d.getTime() * 1000;
+        }
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables })
+        });
+        
+        const result = await response.json();
+        
+        if (result.errors) {
+          throw new Error(result.errors[0].message);
+        }
+        
+        const logs = result.data.systemLogs || [];
+        renderSysLogs(logs);
+        
+      } catch (err) {
+        content.innerHTML = `<div class="message error">❌ 查詢失敗: ${err.message}</div>`;
+      } finally {
+        document.getElementById('logSearchBtn').disabled = false;
+      }
+    }
+    
+    function renderSysLogs(logs) {
+      const content = document.getElementById('syslogContent');
+      const statsDiv = document.getElementById('logStats');
+      
+      if (logs.length === 0) {
+        content.innerHTML = '<div class="message">沒有符合條件的日誌</div>';
+        statsDiv.innerHTML = '';
+        return;
+      }
+      
+      const errorCount = logs.filter(l => l.level === 'error').length;
+      const warnCount = logs.filter(l => l.level === 'warn').length;
+      
+      statsDiv.innerHTML = `
+        <span class="stat-tag total">共 ${logs.length} 筆</span>
+        ${errorCount > 0 ? `<span class="stat-tag incomplete">❌ 錯誤 ${errorCount}</span>` : ''}
+        ${warnCount > 0 ? `<span class="stat-tag" style="background:#FFF8E1;color:#F57C00">⚠️ 警告 ${warnCount}</span>` : ''}
+      `;
+      
+      let html = `
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>時間</th>
+              <th>等級</th>
+              <th>店家</th>
+              <th>機台</th>
+              <th>事件</th>
+              <th>訊息</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      logs.forEach(log => {
+        const levelClass = log.level === 'error' ? 'error' : 
+                          log.level === 'warn' ? 'warn' : 
+                          log.level === 'success' ? 'success' : 'info';
+        const deviceDisplay = log.deviceType === '格口' && log.chid 
+          ? `格口 ${log.chid}` 
+          : (log.deviceType || '-');
+        html += `
+          <tr>
+            <td>${formatTimestamp(log.timestamp)}</td>
+            <td><span class="log-level ${levelClass}">${log.level}</span></td>
+            <td>${log.storeId || '-'}</td>
+            <td>${deviceDisplay}</td>
+            <td>${log.event}</td>
+            <td>${log.message || '-'}</td>
+          </tr>
+        `;
+      });
+      
+      html += '</tbody></table>';
+      content.innerHTML = html;
+    }
+
+    // 設定系統日誌預設日期
+    document.getElementById('logDateTo').value = today.toISOString().split('T')[0];
+    document.getElementById('logDateFrom').value = today.toISOString().split('T')[0];
   </script>
 </body>
 </html>
