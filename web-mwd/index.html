@@ -706,8 +706,6 @@
             <label for="storeId">店號</label>
             <select id="storeId">
               <option value="">全部店家</option>
-              <option value="vm01">vm01店</option>
-              <option value="vm02">vm02店</option>
             </select>
           </div>
           <div class="form-group">
@@ -808,8 +806,6 @@
               <label for="logStoreId">店號</label>
               <select id="logStoreId">
                 <option value="">全部店家</option>
-                <option value="vm01">vm01店</option>
-                <option value="vm02">vm02店</option>
               </select>
             </div>
             <div class="form-group">
@@ -1397,6 +1393,34 @@
     // 設定系統日誌預設日期
     document.getElementById('logDateTo').value = today.toISOString().split('T')[0];
     document.getElementById('logDateFrom').value = today.toISOString().split('T')[0];
+
+    // 從 API 載入店家清單
+    async function loadStores() {
+      try {
+        const query = `query { stores { storeId name } }`;
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        const result = await response.json();
+        if (result.data?.stores) {
+          const storeSelect = document.getElementById('storeId');
+          const logStoreSelect = document.getElementById('logStoreId');
+          result.data.stores.forEach(store => {
+            const option1 = new Option(`${store.name} (${store.storeId})`, store.storeId);
+            const option2 = new Option(`${store.name} (${store.storeId})`, store.storeId);
+            storeSelect.add(option1);
+            logStoreSelect.add(option2);
+          });
+        }
+      } catch (err) {
+        console.error('載入店家清單失敗:', err);
+      }
+    }
+
+    // 頁面載入時載入店家
+    loadStores();
   </script>
 </body>
 </html>
