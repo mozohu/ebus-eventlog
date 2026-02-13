@@ -504,31 +504,33 @@ const resolvers = {
         'arg.oid': { $exists: true, $type: 'string' }
       };
       
-      // 店號篩選 - 只查該店的存餐機
-      if (args.storeId && STORE_DEVICES[args.storeId]) {
-        query.deviceId = STORE_DEVICES[args.storeId].storer;
-      }
-      
-      // 時間範圍
-      if (args.fromTimestamp || args.toTimestamp) {
-        query.timestamp = {};
-        if (args.fromTimestamp) query.timestamp.$gte = args.fromTimestamp;
-        if (args.toTimestamp) query.timestamp.$lte = args.toTimestamp;
-      }
-      
-      // 指定 orderId
+      // ⚠️ orderId 是 Mandatory 特性：有提供就不參考其他過濾器
       if (args.orderId) {
         query['arg.oid'] = args.orderId;
-      }
-      
-      // 指定 token
-      if (args.token) {
-        query['arg.token'] = args.token;
-      }
-      
-      // 指定格口
-      if (args.chid) {
-        query['arg.chid'] = args.chid;
+      } else {
+        // 其餘過濾器採用交集（AND）方式
+        
+        // 店號篩選 - 只查該店的存餐機
+        if (args.storeId && STORE_DEVICES[args.storeId]) {
+          query.deviceId = STORE_DEVICES[args.storeId].storer;
+        }
+        
+        // 時間範圍
+        if (args.fromTimestamp || args.toTimestamp) {
+          query.timestamp = {};
+          if (args.fromTimestamp) query.timestamp.$gte = args.fromTimestamp;
+          if (args.toTimestamp) query.timestamp.$lte = args.toTimestamp;
+        }
+        
+        // 指定 token
+        if (args.token) {
+          query['arg.token'] = args.token;
+        }
+        
+        // 指定格口
+        if (args.chid) {
+          query['arg.chid'] = args.chid;
+        }
       }
       
       // 查詢存餐事件
