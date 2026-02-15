@@ -11,7 +11,7 @@ services:
       - mongo-data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT:-27017}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -32,7 +32,7 @@ services:
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-ebus2026}
     ports:
-      - "8081:8081"
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
 
   api:
     build: ./api
@@ -45,7 +45,7 @@ services:
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD:-ebus2026}@mongodb:27017/ebus?authSource=admin
       PORT: 4000
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4000}:4000"
 
   web:
     image: nginx:alpine
@@ -57,7 +57,7 @@ services:
       - ./web:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "8080:80"
+      - "${WEB_PORT:-8080}:80"
 
   web-mwd:
     image: nginx:alpine
@@ -69,7 +69,7 @@ services:
       - ./web-mwd:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "8083:80"
+      - "${WEB_MWD_PORT:-8083}:80"
 
   web-admin:
     image: nginx:alpine
@@ -81,7 +81,7 @@ services:
       - ./web-admin:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "8084:80"
+      - "${WEB_ADMIN_PORT:-8084}:80"
 
 volumes:
   mongo-data:
