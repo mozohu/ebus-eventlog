@@ -11,7 +11,7 @@ services:
       - mongo-data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${MONGO_PORT:-27017}:27017"
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -31,8 +31,9 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-ebus2026}@mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-ebus2026}
+      ME_CONFIG_SITE_BASEURL: /mongo-express
     ports:
-      - "${MONGO_EXPRESS_PORT:-8081}:8081"
+      - "127.0.0.1:8084:8081"
 
   api:
     build: ./api
@@ -45,7 +46,7 @@ services:
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD:-ebus2026}@mongodb:27017/ebus?authSource=admin
       PORT: 4000
     ports:
-      - "${API_PORT:-4000}:4000"
+      - "127.0.0.1:${API_PORT:-4000}:4000"
 
   web:
     image: nginx:alpine
@@ -55,9 +56,9 @@ services:
       - api
     volumes:
       - ./web:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
 
   web-mwd:
     image: nginx:alpine
@@ -69,7 +70,7 @@ services:
       - ./web-mwd:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${WEB_MWD_PORT:-8083}:80"
+      - "127.0.0.1:${WEB_MWD_PORT:-8083}:80"
 
   web-admin:
     image: nginx:alpine
@@ -81,7 +82,46 @@ services:
       - ./web-admin:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${WEB_ADMIN_PORT:-8084}:80"
+      - "127.0.0.1:${WEB_ADMIN_PORT:-8084}:80"
+
+  nodered:
+    build: ./nodered
+    container_name: ebus-nodered
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Taipei
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-ebus2026}
+    volumes:
+      - ./nodered/flows.json:/data/flows.json
+      - ./nodered/flows_cred.json:/data/flows_cred.json
+      - ./nodered/settings.js:/data/settings.js:ro
+      - nodered-data:/data/node_modules
+    ports:
+      - "127.0.0.1:${NODERED_PORT:-1880}:1880"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ebus-mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -i healthcheck -W 3 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mongo-data:
+  mosquitto-data:
+  mosquitto-log:
+  nodered-data:
