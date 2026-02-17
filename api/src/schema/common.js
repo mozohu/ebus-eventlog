@@ -178,17 +178,6 @@ export const typeDefs = `#graphql
     deviceId: String
   }
 
-  type Shop {
-    id: String!
-    name: String!
-    storerDeviceId: String
-    retrieverDeviceId: String
-  }
-
-  type Device {
-    id: String!
-  }
-
   input TriggerInput {
     timestamp: Float!
     e: String!
@@ -212,16 +201,6 @@ export const typeDefs = `#graphql
     deviceId: String
   }
 
-  input ShopInput {
-    id: String!
-    name: String!
-    storerDeviceId: String
-    retrieverDeviceId: String
-  }
-
-  input DeviceInput {
-    id: String!
-  }
 `;
 
 // ============================================================
@@ -284,17 +263,9 @@ export const resolvers = {
     },
     stateMachines: async (_, args) => {
       const match = args.deviceId ? { deviceId: args.deviceId } : {};
-      return Trigger.distinct('sm', match);
+      const result = await Trigger.distinct('sm', match);
+      return (result || []).filter(Boolean);
     },
-    devices: async () => {
-      const triggers = await Trigger.distinct('deviceId');
-      const transitions = await Transition.distinct('deviceId');
-      return [...new Set([...triggers, ...transitions])].filter(Boolean);
-    },
-    allShops: async () => Shop.find({}).sort({ id: 1 }),
-    shop: async (_, { id }) => Shop.findOne({ id }),
-    allDevices: async () => Device.find({}).sort({ id: 1 }),
-    device: async (_, { id }) => Device.findOne({ id }),
   },
 
   Mutation: {
@@ -306,61 +277,5 @@ export const resolvers = {
     createTransitions: async (_, { inputs }) => Transition.insertMany(inputs),
     deleteTransition: async (_, { id }) => !!(await Transition.findByIdAndDelete(id)),
     deleteTransitionsByDevice: async (_, { deviceId }) => (await Transition.deleteMany({ deviceId })).deletedCount,
-
-    createShop: async (_, { input }) => {
-      input.storerDeviceId = input.storerDeviceId || '';
-      input.retrieverDeviceId = input.retrieverDeviceId || '';
-      if (input.storerDeviceId && input.retrieverDeviceId && input.storerDeviceId === input.retrieverDeviceId)
-        throw new Error('存餐機和取餐機不能使用同一個設備');
-      if (input.storerDeviceId) {
-        if (await Shop.findOne({ storerDeviceId: input.storerDeviceId }))
-          throw new Error(`存餐機 ${input.storerDeviceId} 已被使用`);
-        if (await Shop.findOne({ retrieverDeviceId: input.storerDeviceId }))
-          throw new Error(`設備 ${input.storerDeviceId} 已被作為取餐機使用`);
-      }
-      if (input.retrieverDeviceId) {
-        if (await Shop.findOne({ retrieverDeviceId: input.retrieverDeviceId }))
-          throw new Error(`取餐機 ${input.retrieverDeviceId} 已被使用`);
-        if (await Shop.findOne({ storerDeviceId: input.retrieverDeviceId }))
-          throw new Error(`設備 ${input.retrieverDeviceId} 已被作為存餐機使用`);
-      }
-      const shop = new Shop(input);
-      await shop.save();
-      await loadStoreDevices();
-      return shop;
-    },
-    updateShop: async (_, { id, input }) => {
-      input.storerDeviceId = input.storerDeviceId || '';
-      input.retrieverDeviceId = input.retrieverDeviceId || '';
-      if (input.storerDeviceId && input.retrieverDeviceId && input.storerDeviceId === input.retrieverDeviceId)
-        throw new Error('存餐機和取餐機不能使用同一個設備');
-      if (input.storerDeviceId) {
-        if (await Shop.findOne({ storerDeviceId: input.storerDeviceId, id: { $ne: id } }))
-          throw new Error(`存餐機 ${input.storerDeviceId} 已被其他店鋪使用`);
-        if (await Shop.findOne({ retrieverDeviceId: input.storerDeviceId, id: { $ne: id } }))
-          throw new Error(`設備 ${input.storerDeviceId} 已被其他店鋪作為取餐機使用`);
-      }
-      if (input.retrieverDeviceId) {
-        if (await Shop.findOne({ retrieverDeviceId: input.retrieverDeviceId, id: { $ne: id } }))
-          throw new Error(`取餐機 ${input.retrieverDeviceId} 已被其他店鋪使用`);
-        if (await Shop.findOne({ storerDeviceId: input.retrieverDeviceId, id: { $ne: id } }))
-          throw new Error(`設備 ${input.retrieverDeviceId} 已被其他店鋪作為存餐機使用`);
-      }
-      const shop = await Shop.findOneAndUpdate({ id }, input, { new: true });
-      await loadStoreDevices();
-      return shop;
-    },
-    deleteShop: async (_, { id }) => {
-      const result = await Shop.deleteOne({ id });
-      await loadStoreDevices();
-      return result.deletedCount > 0;
-    },
-    createDevice: async (_, { input }) => new Device(input).save(),
-    deleteDevice: async (_, { id }) => {
-      if (await Shop.findOne({ storerDeviceId: id })) throw new Error(`設備 ${id} 作為存餐機使用中`);
-      if (await Shop.findOne({ retrieverDeviceId: id })) throw new Error(`設備 ${id} 作為取餐機使用中`);
-      return (await Device.deleteOne({ id })).deletedCount > 0;
-    },
-    reloadShops: async () => { await loadStoreDevices(); return true; },
   },
 };
