@@ -52,6 +52,7 @@ const rootTypeDefs = `#graphql
     vendTransactions(deviceId: String, sid: String, oid: String, status: String, from: Float, to: Float, limit: Int): [VendTransaction!]!
     vendTransaction(txno: String!): VendTransaction
     vendTransactionSummaries(deviceId: String, status: String, from: Float, to: Float, limit: Int): [VendTransactionSummary!]!
+    dailyRevenueByOperator(date: String): [OperatorDailyRevenue!]!
 
     # ==================== Users ====================
     users(limit: Int, offset: Int): [User!]!

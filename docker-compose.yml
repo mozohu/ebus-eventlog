@@ -114,6 +114,7 @@ services:
       - mosquitto-log:/mosquitto/log
     ports:
       - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+      - "127.0.0.1:9001:9001"
     healthcheck:
       test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -i healthcheck -W 3 || exit 1"]
       interval: 15s

@@ -92,6 +92,12 @@ export const typeDefs = `#graphql
     invoice: JSON
   }
 
+  type OperatorDailyRevenue {
+    operatorId: String!
+    revenue: Float!
+    txCount: Int!
+  }
+
   type VendTransactionSummary {
     txno: String!
     deviceId: String
@@ -164,6 +170,36 @@ export const resolvers = {
     },
 
     vendTransaction: async (_, { txno }) => VendTransaction.findOne({ txno }),
+
+    dailyRevenueByOperator: async (_, { date }) => {
+      // date: 'YYYY-MM-DD' (Asia/Taipei), default today
+      const d = date ? new Date(date + 'T00:00:00+08:00') : (() => {
+        const now = new Date(Date.now() + 8 * 3600000);
+        return new Date(now.toISOString().slice(0, 10) + 'T00:00:00+08:00');
+      })();
+      const nextDay = new Date(d.getTime() + 86400000);
+
+      // Get vm hidCode→operatorId mapping
+      const vms = await mongoose.connection.db.collection('vms').find({}, { projection: { hidCode: 1, operatorId: 1 } }).toArray();
+      const hidToOp = {};
+      for (const vm of vms) if (vm.hidCode) hidToOp[vm.hidCode] = vm.operatorId;
+
+      // Aggregate transactions for the day (all statuses with price)
+      const txns = await VendTransaction.find({
+        startedAt: { $gte: d, $lt: nextDay },
+        'payment.hint.price': { $exists: true, $gt: 0 },
+      }, { deviceId: 1, 'payment.hint.price': 1 }).lean();
+
+      const result = {};
+      for (const tx of txns) {
+        const opId = hidToOp[tx.deviceId];
+        if (!opId) continue;
+        if (!result[opId]) result[opId] = { operatorId: opId, revenue: 0, txCount: 0 };
+        result[opId].revenue += tx.payment?.hint?.price || 0;
+        result[opId].txCount += 1;
+      }
+      return Object.values(result);
+    },
 
     vendTransactionSummaries: async (_, args) => {
       const query = {};
