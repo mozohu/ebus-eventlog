@@ -11,6 +11,12 @@ import * as hids from './schema/hids.js';
 import * as vms from './schema/vms.js';
 import * as products from './schema/products.js';
 import * as heartbeats from './schema/heartbeats.js';
+import * as presetStock from './schema/presetStock.js';
+import * as inventory from './schema/inventory.js';
+import * as onlineOrders from './schema/onlineOrders.js';
+import * as tickets from './schema/tickets.js';
+import * as dailyStats from './schema/dailyStats.js';
+import * as sessionTimeline from './schema/sessionTimeline.js';
 
 // ============================================================
 // MongoDB connection
@@ -88,6 +94,27 @@ const rootTypeDefs = `#graphql
     # ==================== Heartbeats ====================
     heartbeats(deviceIds: [String!]): [Heartbeat!]!
     heartbeat(deviceId: String!): Heartbeat
+
+    # ==================== Preset Stock ====================
+    presetStockTemplates(operatorId: String, status: String): [PresetStockTemplate!]!
+    presetStockTemplate(id: ID!): PresetStockTemplate
+
+    # ==================== Inventory ====================
+    vmInventory(vmid: String!): [VmChannel!]!
+    replenishPicklist(vmid: String!): [PicklistItem!]!
+    picklistSummary(vmids: [String!]): PicklistSummary!
+
+    # ==================== Online Orders ====================
+    shopProducts: [ShopProduct!]!
+    myOrders(lineUserId: String!): [OnlineOrder!]!
+    onlineOrder(orderId: String!): OnlineOrder
+    operatorOnlineOrders(operatorId: String!, status: String, limit: Int): [OnlineOrder!]!
+    allOnlineOrders(status: String, limit: Int): [OnlineOrder!]!
+
+    # ==================== Tickets ====================
+    myTickets(lineUserId: String!): [Ticket!]!
+    ticket(ticketId: String!): Ticket
+    operatorTickets(operatorId: String!, status: String): [Ticket!]!
   }
 
   type Mutation {
@@ -123,6 +150,27 @@ const rootTypeDefs = `#graphql
     createProduct(input: CreateProductInput!): Product!
     updateProduct(id: ID!, input: UpdateProductInput!): Product
     deleteProduct(id: ID!): Boolean!
+
+    # ==================== Preset Stock ====================
+    createPresetStockTemplate(input: CreatePresetStockTemplateInput!): PresetStockTemplate!
+    copyPresetStockFromMachine(operatorId: String!, name: String!, machineId: ID!): PresetStockTemplate!
+    copyPresetStockFromTemplate(operatorId: String!, name: String!, sourceTemplateId: ID!): PresetStockTemplate!
+    renamePresetStockTemplate(id: ID!, name: String!): PresetStockTemplate
+    deletePresetStockTemplate(id: ID!): Boolean!
+    updatePresetStockChannels(templateId: ID!, channels: [PresetStockChannelInput!]!): PresetStockTemplate!
+
+    # ==================== Inventory ====================
+    updateVmInventory(input: UpdateVmInventoryInput!): VmChannel!
+
+    # ==================== Online Orders ====================
+    createOnlineOrder(input: CreateOnlineOrderInput!): OnlineOrder!
+    updateOnlineOrderStatus(orderId: String!, status: String!): OnlineOrder
+    toggleOrderItemPickup(orderId: String!, itemIndex: Int!, pickedUp: Boolean!): OnlineOrder
+
+    # ==================== Tickets ====================
+    createTicket(input: CreateTicketInput!): Ticket!
+    replyTicket(ticketId: String!, from: String!, displayName: String!, text: String!): Ticket!
+    updateTicketStatus(ticketId: String!, status: String!): Ticket!
   }
 `;
 
@@ -136,6 +184,18 @@ const typeDefs = [
   vms.typeDefs, // types: Vm, CreateVmInput, UpdateVmInput
   products.typeDefs, // types: Product, CreateProductInput, UpdateProductInput
   heartbeats.typeDefs, // types: Heartbeat
+  presetStock.typeDefs, // types: PresetStockTemplate, PresetStockChannel
+  inventory.typeDefs, // types: VmChannel, PicklistItem, PicklistChannel
+  onlineOrders.typeDefs, // types: OnlineOrder, ShopProduct
+  tickets.typeDefs, // types: Ticket, TicketMessage, CreateTicketInput
+  dailyStats.typeDefs, // types: DailyStatPoint, DailyStatDetail
+  sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
+  `#graphql
+    input CreatePresetStockTemplateInput {
+      operatorId: String!
+      name: String!
+    }
+  `,
   rootTypeDefs,      // root Query + Mutation
 ];
 
@@ -164,6 +224,12 @@ deepMerge(resolvers, hids.resolvers);
 deepMerge(resolvers, vms.resolvers);
 deepMerge(resolvers, products.resolvers);
 deepMerge(resolvers, heartbeats.resolvers);
+deepMerge(resolvers, presetStock.resolvers);
+deepMerge(resolvers, inventory.resolvers);
+deepMerge(resolvers, onlineOrders.resolvers);
+deepMerge(resolvers, tickets.resolvers);
+deepMerge(resolvers, dailyStats.resolvers);
+deepMerge(resolvers, sessionTimeline.resolvers);
 
 // ============================================================
 // Start server
