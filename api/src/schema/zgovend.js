@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { requireAuth } from '../auth.js';
 
 // ============================================================
 // Mongoose Models (projection collections from Node-RED)
@@ -131,7 +132,8 @@ export const resolvers = {
   },
 
   Query: {
-    vendSessions: async (_, args) => {
+    vendSessions: async (_, args, { user }) => {
+      requireAuth(user);
       const query = {};
       if (args.deviceId) query.deviceId = args.deviceId;
       if (args.status) query.status = args.status;
@@ -143,9 +145,13 @@ export const resolvers = {
       return VendSession.find(query).sort({ startedAt: -1 }).limit(args.limit || 50);
     },
 
-    vendSession: async (_, { sid }) => VendSession.findOne({ sid }),
+    vendSession: async (_, { sid }, { user }) => {
+      requireAuth(user);
+      return VendSession.findOne({ sid });
+    },
 
-    vendOrders: async (_, args) => {
+    vendOrders: async (_, args, { user }) => {
+      requireAuth(user);
       const query = {};
       if (args.deviceId) query.deviceId = args.deviceId;
       if (args.sid) query.sid = args.sid;
@@ -153,9 +159,13 @@ export const resolvers = {
       return VendOrder.find(query).sort({ orderedAt: -1 }).limit(args.limit || 50);
     },
 
-    vendOrder: async (_, { oid }) => VendOrder.findOne({ oid }),
+    vendOrder: async (_, { oid }, { user }) => {
+      requireAuth(user);
+      return VendOrder.findOne({ oid });
+    },
 
-    vendTransactions: async (_, args) => {
+    vendTransactions: async (_, args, { user }) => {
+      requireAuth(user);
       const query = {};
       if (args.deviceId) query.deviceId = args.deviceId;
       if (args.sid) query.sid = args.sid;
@@ -169,9 +179,13 @@ export const resolvers = {
       return VendTransaction.find(query).sort({ startedAt: -1 }).limit(args.limit || 50);
     },
 
-    vendTransaction: async (_, { txno }) => VendTransaction.findOne({ txno }),
+    vendTransaction: async (_, { txno }, { user }) => {
+      requireAuth(user);
+      return VendTransaction.findOne({ txno });
+    },
 
-    dailyRevenueByOperator: async (_, { date }) => {
+    dailyRevenueByOperator: async (_, { date }, { user }) => {
+      requireAuth(user);
       // date: 'YYYY-MM-DD' (Asia/Taipei), default today
       const d = date ? new Date(date + 'T00:00:00+08:00') : (() => {
         const now = new Date(Date.now() + 8 * 3600000);
@@ -201,7 +215,8 @@ export const resolvers = {
       return Object.values(result);
     },
 
-    vendTransactionSummaries: async (_, args) => {
+    vendTransactionSummaries: async (_, args, { user }) => {
+      requireAuth(user);
       const query = {};
       if (args.deviceId) query.deviceId = args.deviceId;
       if (args.status) query.status = args.status;

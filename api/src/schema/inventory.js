@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { requireAuth } from '../auth.js';
 
 // ============================================================
 // Mongoose Schema
@@ -91,7 +92,8 @@ export const typeDefs = `#graphql
 export const resolvers = {
   Query: {
     // 取得某台機器所有貨道庫存
-    vmInventory: async (_, { vmid }) => {
+    vmInventory: async (_, { vmid }, { user }) => {
+      requireAuth(user);
       const inventoryList = await VmInventory.find({ vmid }).sort({ channelNo: 1 });
       
       // 取得所有商品資訊
@@ -126,7 +128,8 @@ export const resolvers = {
     },
 
     // 撿貨彙總（跨機台，按商品 grouping）
-    picklistSummary: async (_, { vmids }) => {
+    picklistSummary: async (_, { vmids }, { user }) => {
+      requireAuth(user);
       const query = {};
       if (vmids && vmids.length > 0) query.vmid = { $in: vmids };
       const all = await VmInventory.find(query).sort({ vmid: 1, channelNo: 1 }).lean();
@@ -175,7 +178,8 @@ export const resolvers = {
     },
 
     // 撿貨清單（只回傳需要補貨的商品）
-    replenishPicklist: async (_, { vmid }) => {
+    replenishPicklist: async (_, { vmid }, { user }) => {
+      requireAuth(user);
       // 找出所有 currentQty < maxQty 的貨道
       const inventoryList = await VmInventory.find({ 
         vmid,
@@ -242,7 +246,8 @@ export const resolvers = {
 
   Mutation: {
     // 更新單一貨道庫存
-    updateVmInventory: async (_, { input }) => {
+    updateVmInventory: async (_, { input }, { user }) => {
+      requireAuth(user);
       const { vmid, channelNo, currentQty } = input;
       
       const updated = await VmInventory.findOneAndUpdate(

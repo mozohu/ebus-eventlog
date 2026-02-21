@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { requireAuth, requireAdmin, requireOperatorAccess } from '../auth.js';
 
 // ============================================================
 // Mongoose Schema
@@ -115,6 +116,7 @@ export const resolvers = {
   },
   Query: {
     shopProducts: async () => {
+      // Public: browsing shop
       // Aggregate inventory across all VMs, only items with stock
       const pipeline = [
         { $match: { currentQty: { $gt: 0 } } },
@@ -146,15 +148,30 @@ export const resolvers = {
       }).filter(p => p.price > 0).sort((a, b) => a.productCode.localeCompare(b.productCode));
     },
 
-    myOrders: async (_, { lineUserId }) => {
-      return OnlineOrder.find({ lineUserId }).sort({ createdAt: -1 }).lean();
+    myOrders: async (_, args, { user }) => {
+      requireAuth(user);
+      // Use user.lineUserId instead of args.lineUserId for security
+      return OnlineOrder.find({ lineUserId: user.lineUserId }).sort({ createdAt: -1 }).lean();
     },
 
-    onlineOrder: async (_, { orderId }) => {
-      return OnlineOrder.findOne({ orderId }).lean();
+    onlineOrder: async (_, { orderId }, { user }) => {
+      requireAuth(user);
+      const order = await OnlineOrder.findOne({ orderId }).lean();
+      if (!order) return null;
+      // Allow owner or admin or operator with access
+      if (order.lineUserId === user.lineUserId) return order;
+      if (user.isAdmin) return order;
+      // Check operator access
+      const operatorIds = [...new Set(order.items.map(i => i.operatorId))];
+      const hasAccess = operatorIds.some(opId => 
+        user.operatorRoles.some(r => r.operatorId === opId)
+      );
+      if (hasAccess) return order;
+      throw new Error('無權存取此訂單');
     },
 
-    operatorOnlineOrders: async (_, { operatorId, status, limit }) => {
+    operatorOnlineOrders: async (_, { operatorId, status, limit }, { user }) => {
+      requireOperatorAccess(user, operatorId);
       const query = { 'items.operatorId': operatorId };
       if (status) query.status = status;
       const orders = await OnlineOrder.find(query).sort({ createdAt: -1 }).limit(limit || 100).lean();
@@ -166,7 +183,8 @@ export const resolvers = {
       }));
     },
 
-    allOnlineOrders: async (_, { status, limit }) => {
+    allOnlineOrders: async (_, { status, limit }, { user }) => {
+      requireAdmin(user);
       const query = {};
       if (status) query.status = status;
       return OnlineOrder.find(query).sort({ createdAt: -1 }).limit(limit || 100).lean();
@@ -174,7 +192,8 @@ export const resolvers = {
   },
 
   Mutation: {
-    createOnlineOrder: async (_, { input }) => {
+    createOnlineOrder: async (_, { input }, { user }) => {
+      requireAuth(user);
       const { lineUserId, displayName, items, paymentMethod } = input;
       const orderItems = [];
       let totalAmount = 0;
@@ -241,10 +260,15 @@ export const resolvers = {
       return order.toObject();
     },
 
-    toggleOrderItemPickup: async (_, { orderId, itemIndex, pickedUp }) => {
+    toggleOrderItemPickup: async (_, { orderId, itemIndex, pickedUp }, { user }) => {
+      requireAuth(user);
       const order = await OnlineOrder.findOne({ orderId });
       if (!order) throw new Error('Order not found');
+      // Check operator access for the item being toggled
       if (itemIndex < 0 || itemIndex >= order.items.length) throw new Error('Invalid item index');
+      const item = order.items[itemIndex];
+      requireOperatorAccess(user, item.operatorId);
+      
       order.items[itemIndex].pickedUp = pickedUp;
       // If all items picked up, auto-update status
       const allPicked = order.items.every(i => i.pickedUp);
@@ -255,13 +279,23 @@ export const resolvers = {
       return order.toObject();
     },
 
-    updateOnlineOrderStatus: async (_, { orderId, status }) => {
-      const order = await OnlineOrder.findOneAndUpdate(
+    updateOnlineOrderStatus: async (_, { orderId, status }, { user }) => {
+      requireAuth(user);
+      const order = await OnlineOrder.findOne({ orderId });
+      if (!order) throw new Error('Order not found');
+      // Check if user has access to at least one operator in the order
+      const operatorIds = [...new Set(order.items.map(i => i.operatorId))];
+      const hasAccess = user.isAdmin || operatorIds.some(opId => 
+        user.operatorRoles.some(r => r.operatorId === opId)
+      );
+      if (!hasAccess) throw new Error('無權更新此訂單');
+      
+      const updated = await OnlineOrder.findOneAndUpdate(
         { orderId },
         { $set: { status, updatedAt: new Date() } },
         { new: true }
       );
-      return order?.toObject() || null;
+      return updated?.toObject() || null;
     },
   },
 };

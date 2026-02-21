@@ -1,6 +1,7 @@
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import mongoose from 'mongoose';
+import { authenticateRequest } from './auth.js';
 
 import * as common from './schema/common.js';
 import * as pickup from './schema/pickup.js';
@@ -239,6 +240,10 @@ const server = new ApolloServer({ typeDefs, resolvers });
 
 const { url } = await startStandaloneServer(server, {
   listen: { port: parseInt(process.env.PORT) || 4000 },
+  context: async ({ req }) => {
+    const user = await authenticateRequest(req);
+    return { user };
+  },
 });
 
 console.log(`🚀 GraphQL API ready at ${url}`);

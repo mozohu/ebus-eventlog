@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { requireAuth } from '../auth.js'
 
 const DailyStat = mongoose.model('DailyStat', new mongoose.Schema({
   deviceId: String,
@@ -49,7 +50,8 @@ export const typeDefs = `#graphql
 
 export const resolvers = {
   Query: {
-    async dailyRevenue(_, { deviceIds, from, to }) {
+    async dailyRevenue(_, { deviceIds, from, to }, { user }) {
+      requireAuth(user);
       const filter = {}
       if (deviceIds && deviceIds.length) filter.deviceId = { $in: deviceIds }
       if (from || to) {
@@ -73,7 +75,8 @@ export const resolvers = {
       return DailyStat.aggregate(pipeline)
     },
 
-    async dailyStatsDetail(_, { deviceIds, from, to }) {
+    async dailyStatsDetail(_, { deviceIds, from, to }, { user }) {
+      requireAuth(user);
       const filter = {}
       if (deviceIds && deviceIds.length) filter.deviceId = { $in: deviceIds }
       if (from || to) {

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { requireAuth } from '../auth.js'
 
 // Use existing models (already compiled in other schema files)
 const Trigger = mongoose.models.Trigger
@@ -51,7 +52,8 @@ export const typeDefs = `#graphql
 
 export const resolvers = {
   Query: {
-    async sessionTimeline(_, { txno }) {
+    async sessionTimeline(_, { txno }, { user }) {
+      requireAuth(user);
       // Find transaction
       const tx = await VendTransaction.findOne({ txno }).lean()
       if (!tx) return null

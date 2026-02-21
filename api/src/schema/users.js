@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { requireAuth, requireAdmin } from '../auth.js';
 
 // ============================================================
 // Mongoose Model
@@ -77,23 +78,34 @@ export const resolvers = {
   },
 
   Query: {
-    users: async (_, { limit, offset }) => {
+    users: async (_, { limit, offset }, { user }) => {
+      requireAdmin(user);
       return User.find({})
         .sort({ lastLoginAt: -1 })
         .skip(offset || 0)
         .limit(limit || 100);
     },
-    user: async (_, { lineUserId }) => {
+    user: async (_, { lineUserId }, { user }) => {
+      requireAuth(user);
+      // Allow admins or the user themselves
+      if (!user.isAdmin && user.lineUserId !== lineUserId) {
+        throw new Error('無權存取此用戶資料');
+      }
       return User.findOne({ lineUserId });
     },
-    userCount: async () => User.countDocuments({}),
-    usersByOperator: async (_, { operatorId }) => {
+    userCount: async (_, args, { user }) => {
+      requireAdmin(user);
+      return User.countDocuments({});
+    },
+    usersByOperator: async (_, { operatorId }, { user }) => {
+      requireAdmin(user);
       return User.find({ 'operatorRoles.operatorId': operatorId }).sort({ displayName: 1 });
     },
   },
 
   Mutation: {
-    upsertUser: async (_, { input }) => {
+    upsertUser: async (_, { input }, { user }) => {
+      requireAdmin(user);
       const { lineUserId, displayName, pictureUrl } = input;
       return User.findOneAndUpdate(
         { lineUserId },
@@ -114,7 +126,8 @@ export const resolvers = {
       );
     },
 
-    updateUserOperatorRoles: async (_, { input }) => {
+    updateUserOperatorRoles: async (_, { input }, { user }) => {
+      requireAdmin(user);
       const { lineUserId, isAdmin, operatorRoles } = input;
       const validRoles = ['operator', 'replenisher'];
       const cleaned = operatorRoles

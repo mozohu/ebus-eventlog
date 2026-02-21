@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { requireAuth, requireOperatorAccess } from '../auth.js';
 
 // ============================================================
 // Mongoose Schema
@@ -85,15 +86,26 @@ export const typeDefs = `#graphql
 
 export const resolvers = {
   Query: {
-    myTickets: async (_, { lineUserId }) => {
-      return Ticket.find({ lineUserId }).sort({ updatedAt: -1 }).lean();
+    myTickets: async (_, args, { user }) => {
+      requireAuth(user);
+      // Use user.lineUserId for security
+      return Ticket.find({ lineUserId: user.lineUserId }).sort({ updatedAt: -1 }).lean();
     },
 
-    ticket: async (_, { ticketId }) => {
-      return Ticket.findOne({ ticketId }).lean();
+    ticket: async (_, { ticketId }, { user }) => {
+      requireAuth(user);
+      const ticket = await Ticket.findOne({ ticketId }).lean();
+      if (!ticket) return null;
+      // Allow owner or operator with access
+      if (ticket.lineUserId === user.lineUserId) return ticket;
+      if (user.isAdmin) return ticket;
+      const hasAccess = user.operatorRoles.some(r => r.operatorId === ticket.operatorId);
+      if (hasAccess) return ticket;
+      throw new Error('無權存取此工單');
     },
 
-    operatorTickets: async (_, { operatorId, status }) => {
+    operatorTickets: async (_, { operatorId, status }, { user }) => {
+      requireOperatorAccess(user, operatorId);
       const query = { operatorId };
       if (status) query.status = status;
       return Ticket.find(query).sort({ updatedAt: -1 }).lean();
@@ -101,7 +113,8 @@ export const resolvers = {
   },
 
   Mutation: {
-    createTicket: async (_, { input }) => {
+    createTicket: async (_, { input }, { user }) => {
+      requireAuth(user);
       const now = new Date();
       // Resolve operatorId from vmid
       let operatorId = input.operatorId;
@@ -134,7 +147,16 @@ export const resolvers = {
       return ticket.toObject();
     },
 
-    replyTicket: async (_, { ticketId, from, displayName, text }) => {
+    replyTicket: async (_, { ticketId, from, displayName, text }, { user }) => {
+      requireAuth(user);
+      // First check the ticket exists and user has access
+      const existingTicket = await Ticket.findOne({ ticketId }).lean();
+      if (!existingTicket) throw new Error('Ticket not found');
+      // Allow owner or operator with access
+      const isOwner = existingTicket.lineUserId === user.lineUserId;
+      const hasOperatorAccess = user.isAdmin || user.operatorRoles.some(r => r.operatorId === existingTicket.operatorId);
+      if (!isOwner && !hasOperatorAccess) throw new Error('無權回覆此工單');
+      
       const now = new Date();
       const ticket = await Ticket.findOneAndUpdate(
         { ticketId },
@@ -144,11 +166,16 @@ export const resolvers = {
         },
         { new: true }
       );
-      if (!ticket) throw new Error('Ticket not found');
       return ticket.toObject();
     },
 
-    updateTicketStatus: async (_, { ticketId, status }) => {
+    updateTicketStatus: async (_, { ticketId, status }, { user }) => {
+      requireAuth(user);
+      const existingTicket = await Ticket.findOne({ ticketId }).lean();
+      if (!existingTicket) throw new Error('Ticket not found');
+      // Only operators can update status
+      requireOperatorAccess(user, existingTicket.operatorId);
+      
       const update = { status, updatedAt: new Date() };
       if (status === 'resolved' || status === 'closed') {
         update.resolvedAt = new Date();
@@ -158,7 +185,6 @@ export const resolvers = {
         { $set: update },
         { new: true }
       );
-      if (!ticket) throw new Error('Ticket not found');
       return ticket.toObject();
     },
   },
