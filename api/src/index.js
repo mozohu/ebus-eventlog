@@ -17,6 +17,7 @@ import * as inventory from './schema/inventory.js';
 import * as onlineOrders from './schema/onlineOrders.js';
 import * as tickets from './schema/tickets.js';
 import * as dailyStats from './schema/dailyStats.js';
+import * as stocks from './schema/stocks.js';
 import * as sessionTimeline from './schema/sessionTimeline.js';
 
 // ============================================================
@@ -92,9 +93,12 @@ const rootTypeDefs = `#graphql
     productByCode(operatorId: String!, code: String!): Product
     productCount(operatorId: String): Int!
 
+    # ==================== Stocks ====================
+    stock(deviceId: String!): Stock
     # ==================== Heartbeats ====================
     heartbeats(deviceIds: [String!]): [Heartbeat!]!
     heartbeat(deviceId: String!): Heartbeat
+    heartbeatHistory(deviceId: String!, limit: Int): [Heartbeat!]!
 
     # ==================== Preset Stock ====================
     presetStockTemplates(operatorId: String, status: String): [PresetStockTemplate!]!
@@ -168,6 +172,8 @@ const rootTypeDefs = `#graphql
     updateOnlineOrderStatus(orderId: String!, status: String!): OnlineOrder
     toggleOrderItemPickup(orderId: String!, itemIndex: Int!, pickedUp: Boolean!): OnlineOrder
 
+    # ==================== Heartbeats ====================
+    createHeartbeat(input: CreateHeartbeatInput!): Heartbeat!
     # ==================== Tickets ====================
     createTicket(input: CreateTicketInput!): Ticket!
     replyTicket(ticketId: String!, from: String!, displayName: String!, text: String!): Ticket!
@@ -190,6 +196,7 @@ const typeDefs = [
   onlineOrders.typeDefs, // types: OnlineOrder, ShopProduct
   tickets.typeDefs, // types: Ticket, TicketMessage, CreateTicketInput
   dailyStats.typeDefs, // types: DailyStatPoint, DailyStatDetail
+  stocks.typeDefs,
   sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
   `#graphql
     input CreatePresetStockTemplateInput {
@@ -230,6 +237,7 @@ deepMerge(resolvers, inventory.resolvers);
 deepMerge(resolvers, onlineOrders.resolvers);
 deepMerge(resolvers, tickets.resolvers);
 deepMerge(resolvers, dailyStats.resolvers);
+deepMerge(resolvers, stocks.resolvers);
 deepMerge(resolvers, sessionTimeline.resolvers);
 
 // ============================================================

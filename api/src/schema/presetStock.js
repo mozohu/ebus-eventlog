@@ -57,6 +57,7 @@ export const typeDefs = `#graphql
     templateId: ID!
     channelNo: String!
     productId: String
+    productCode: String
     productName: String
     parLevel: Int!
     stockLevel: Int!
@@ -83,14 +84,20 @@ export const resolvers = {
       let productMap = {};
       if (productIds.length > 0) {
         const Product = mongoose.model('Product');
-        const products = await Product.find({ _id: { $in: productIds } }, { name: 1 }).lean();
-        for (const p of products) productMap[p._id.toString()] = p.name;
+        const products = await Product.find({ _id: { $in: productIds } }, { name: 1, code: 1 }).lean();
+        for (const p of products) {
+          productMap[p._id.toString()] = p.name;
+        }
+        // Build code map: MongoDB _id → product code
+        var productCodeMap = {};
+        for (const p of products) productCodeMap[p._id.toString()] = p.code;
       }
       return channels.map(c => ({
         id: c._id.toString(),
         templateId: c.templateId.toString(),
         channelNo: c.channelNo,
         productId: c.productId || null,
+        productCode: c.productId ? (productCodeMap?.[c.productId] || null) : null,
         productName: c.productId ? (productMap[c.productId] || null) : null,
         parLevel: c.parLevel,
         stockLevel: c.stockLevel,

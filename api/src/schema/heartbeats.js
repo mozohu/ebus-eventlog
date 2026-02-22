@@ -1,15 +1,19 @@
 import mongoose from 'mongoose';
 
-// 每台機台只保留最新一筆心跳（由 Node-RED upsert）
 const heartbeatSchema = new mongoose.Schema({
-  deviceId: { type: String, required: true, unique: true, index: true },
+  deviceId: { type: String, required: true, index: true },
   temperature: { type: Number, default: null },
   screenshotUrl: { type: String, default: '' },
-  payload: { type: mongoose.Schema.Types.Mixed, default: {} },  // 完整心跳 payload
+  payload: { type: mongoose.Schema.Types.Mixed, default: {} },
   receivedAt: { type: Date, default: Date.now },
 }, { collection: 'heartbeats' });
 
+heartbeatSchema.index({ deviceId: 1, receivedAt: -1 });
+
 const Heartbeat = mongoose.model('Heartbeat', heartbeatSchema);
+
+// Drop legacy unique index on deviceId if present
+Heartbeat.collection.dropIndex('deviceId_1').catch(() => {});
 
 export const typeDefs = `#graphql
   type Heartbeat {
@@ -20,6 +24,12 @@ export const typeDefs = `#graphql
     payload: JSON
     receivedAt: String
   }
+
+  input CreateHeartbeatInput {
+    deviceId: String!
+    temperature: Float
+    payload: JSON
+  }
 `;
 
 export const resolvers = {
@@ -29,12 +39,34 @@ export const resolvers = {
 
   Query: {
     heartbeats: async (_, { deviceIds }) => {
-      const query = {};
-      if (deviceIds && deviceIds.length > 0) query.deviceId = { $in: deviceIds };
-      return Heartbeat.find(query).sort({ deviceId: 1 });
+      const match = {};
+      if (deviceIds && deviceIds.length > 0) match.deviceId = { $in: deviceIds };
+      // Return latest heartbeat per device
+      return Heartbeat.aggregate([
+        { $match: match },
+        { $sort: { receivedAt: -1 } },
+        { $group: { _id: '$deviceId', doc: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $sort: { deviceId: 1 } },
+      ]);
     },
     heartbeat: async (_, { deviceId }) => {
-      return Heartbeat.findOne({ deviceId });
+      return Heartbeat.findOne({ deviceId }).sort({ receivedAt: -1 });
+    },
+    heartbeatHistory: async (_, { deviceId, limit }) => {
+      return Heartbeat.find({ deviceId }).sort({ receivedAt: -1 }).limit(limit || 100);
+    },
+  },
+
+  Mutation: {
+    createHeartbeat: async (_, { input }) => {
+      const hb = new Heartbeat({
+        deviceId: input.deviceId,
+        temperature: input.temperature ?? null,
+        payload: input.payload || {},
+        receivedAt: new Date(),
+      });
+      return hb.save();
     },
   },
 };
