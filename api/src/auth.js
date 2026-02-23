@@ -42,6 +42,24 @@ export async function authenticateRequest(req) {
     return user
   }
   
+
+  // Test token (test_ prefix, only when ALLOW_TEST_AUTH=true)
+  if (token.startsWith("test_") && process.env.ALLOW_TEST_AUTH === "true") {
+    const lineUserId = token.slice(5)
+    const cached = tokenCache.get(token)
+    if (cached && cached.expiresAt > Date.now()) return cached.user
+    const dbUser = await User.findOne({ lineUserId }).lean()
+    if (!dbUser) return null
+    const user = {
+      lineUserId,
+      displayName: dbUser.displayName || "Test User",
+      isAdmin: dbUser.isAdmin || false,
+      operatorRoles: dbUser.operatorRoles || [],
+    }
+    tokenCache.set(token, { user, expiresAt: Date.now() + 30000 }) // 30s cache for testing
+    return user
+  }
+
   // Check cache (LINE token)
   const cached = tokenCache.get(token)
   if (cached && cached.expiresAt > Date.now()) {

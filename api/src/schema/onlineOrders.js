@@ -82,6 +82,7 @@ export const typeDefs = `#graphql
     imageUrl: String
     price: Float!
     availableQty: Int!
+    locations: [String!]!
   }
 
   input OrderItemInput {
@@ -117,12 +118,13 @@ export const resolvers = {
   Query: {
     shopProducts: async () => {
       // Public: browsing shop
-      // Aggregate inventory across all VMs, only items with stock
+      // Aggregate inventory across all VMs, collect vmids for location lookup
       const pipeline = [
         { $match: { currentQty: { $gt: 0 } } },
         { $group: {
           _id: { operatorId: '$operatorId', productCode: '$productCode' },
           availableQty: { $sum: '$currentQty' },
+          vmids: { $addToSet: '$vmid' },
         }},
       ];
       const agg = await VmInventory.aggregate(pipeline);
@@ -134,9 +136,17 @@ export const resolvers = {
       const prodMap = {};
       products.forEach(p => { prodMap[`${p.operatorId}::${p.code}`] = p; });
 
+      // Get VM locations
+      const allVmids = [...new Set(agg.flatMap(a => a.vmids))];
+      const Vm = mongoose.model('Vm');
+      const vms = await Vm.find({ vmid: { $in: allVmids } }, { vmid: 1, locationName: 1 }).lean();
+      const vmLocMap = {};
+      vms.forEach(v => { if (v.locationName) vmLocMap[v.vmid] = v.locationName; });
+
       return agg.map(a => {
         const key = `${a._id.operatorId}::${a._id.productCode}`;
         const prod = prodMap[key] || {};
+        const locations = [...new Set(a.vmids.map(v => vmLocMap[v]).filter(Boolean))];
         return {
           productCode: a._id.productCode,
           operatorId: a._id.operatorId,
@@ -144,6 +154,7 @@ export const resolvers = {
           imageUrl: prod.imageUrl || '',
           price: prod.price || 0,
           availableQty: a.availableQty,
+          locations,
         };
       }).filter(p => p.price > 0).sort((a, b) => a.productCode.localeCompare(b.productCode));
     },

@@ -15,6 +15,7 @@ export const typeDefs = `#graphql
     trigger: String!
     state: String
     arg: JSON
+    can: Int
   }
 
   type SessionInfo {
@@ -66,10 +67,11 @@ export const resolvers = {
       const end = session?.endedAt || tx.endedAt
       if (!start || !end) return null
 
-      // Get all triggers in this time window
+      // Get all triggers in this time window (skip invalid can=0 triggers)
       const triggers = await Trigger.find({
         deviceId: tx.deviceId,
-        receivedAt: { $gte: start, $lte: end }
+        receivedAt: { $gte: start, $lte: end },
+        can: { $ne: 0 }
       }).sort({ receivedAt: 1 }).lean()
 
       const events = triggers.map(t => ({
@@ -80,6 +82,7 @@ export const resolvers = {
         trigger: t.trigger || t.e?.split('/')[1] || '',
         state: t.st || '',
         arg: t.arg || {},
+        can: t.can ?? null,
       }))
 
       const transaction = {

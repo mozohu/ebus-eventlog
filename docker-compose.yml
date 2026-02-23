@@ -45,6 +45,7 @@ services:
     environment:
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD:-ebus2026}@mongodb:27017/ebus?authSource=admin
       PORT: 4000
+      ALLOW_TEST_AUTH: "true"
     ports:
       - "127.0.0.1:${API_PORT:-4000}:4000"
 

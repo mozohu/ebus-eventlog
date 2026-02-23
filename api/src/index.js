@@ -98,7 +98,7 @@ const rootTypeDefs = `#graphql
     # ==================== Heartbeats ====================
     heartbeats(deviceIds: [String!]): [Heartbeat!]!
     heartbeat(deviceId: String!): Heartbeat
-    heartbeatHistory(deviceId: String!, limit: Int): [Heartbeat!]!
+    tempHistory(deviceId: String!, limit: Int): [TemperatureRecord!]!
 
     # ==================== Preset Stock ====================
     presetStockTemplates(operatorId: String, status: String): [PresetStockTemplate!]!
