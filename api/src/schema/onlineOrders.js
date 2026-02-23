@@ -28,7 +28,7 @@ const onlineOrderSchema = new mongoose.Schema({
 }, { collection: 'online_orders' });
 
 const OnlineOrder = mongoose.model('OnlineOrder', onlineOrderSchema);
-const VmInventory = mongoose.model('VmInventory');
+const Stock = mongoose.model('Stock');
 const Product = mongoose.model('Product');
 
 // ============================================================
@@ -117,43 +117,50 @@ export const resolvers = {
   },
   Query: {
     shopProducts: async () => {
-      // Public: browsing shop
-      // Aggregate inventory across all VMs, collect vmids for location lookup
-      const pipeline = [
-        { $match: { currentQty: { $gt: 0 } } },
-        { $group: {
-          _id: { operatorId: '$operatorId', productCode: '$productCode' },
-          availableQty: { $sum: '$currentQty' },
-          vmids: { $addToSet: '$vmid' },
-        }},
-      ];
-      const agg = await VmInventory.aggregate(pipeline);
-      if (!agg.length) return [];
+      // Public: browsing shop — aggregate from stocks collection
+      const allStocks = await Stock.find({}).lean();
+      if (!allStocks.length) return [];
+
+      // Flatten: group by operatorId+productCode, sum quantities
+      const grouped = {};
+      const vmidsByProduct = {};
+      for (const s of allStocks) {
+        if (!s.operatorId || !s.channels) continue;
+        for (const [chid, ch] of Object.entries(s.channels)) {
+          if (!ch.p_id || (ch.quantity || 0) <= 0) continue;
+          const key = `${s.operatorId}::${ch.p_id}`;
+          if (!grouped[key]) { grouped[key] = { operatorId: s.operatorId, productCode: ch.p_id, availableQty: 0 }; vmidsByProduct[key] = new Set(); }
+          grouped[key].availableQty += (ch.quantity || 0);
+          if (s.vmid) vmidsByProduct[key].add(s.vmid);
+        }
+      }
+
+      const entries = Object.entries(grouped);
+      if (!entries.length) return [];
 
       // Get product details
-      const keys = agg.map(a => ({ operatorId: a._id.operatorId, code: a._id.productCode }));
+      const keys = entries.map(([, g]) => ({ operatorId: g.operatorId, code: g.productCode }));
       const products = await Product.find({ $or: keys }).lean();
       const prodMap = {};
       products.forEach(p => { prodMap[`${p.operatorId}::${p.code}`] = p; });
 
       // Get VM locations
-      const allVmids = [...new Set(agg.flatMap(a => a.vmids))];
+      const allVmids = [...new Set(entries.flatMap(([k]) => [...(vmidsByProduct[k] || [])]))];
       const Vm = mongoose.model('Vm');
-      const vms = await Vm.find({ vmid: { $in: allVmids } }, { vmid: 1, locationName: 1 }).lean();
+      const vms = allVmids.length > 0 ? await Vm.find({ vmid: { $in: allVmids } }, { vmid: 1, locationName: 1 }).lean() : [];
       const vmLocMap = {};
       vms.forEach(v => { if (v.locationName) vmLocMap[v.vmid] = v.locationName; });
 
-      return agg.map(a => {
-        const key = `${a._id.operatorId}::${a._id.productCode}`;
+      return entries.map(([key, g]) => {
         const prod = prodMap[key] || {};
-        const locations = [...new Set(a.vmids.map(v => vmLocMap[v]).filter(Boolean))];
+        const locations = [...new Set([...(vmidsByProduct[key] || [])].map(v => vmLocMap[v]).filter(Boolean))];
         return {
-          productCode: a._id.productCode,
-          operatorId: a._id.operatorId,
-          productName: prod.name || a._id.productCode,
+          productCode: g.productCode,
+          operatorId: g.operatorId,
+          productName: prod.name || g.productCode,
           imageUrl: prod.imageUrl || '',
           price: prod.price || 0,
-          availableQty: a.availableQty,
+          availableQty: g.availableQty,
           locations,
         };
       }).filter(p => p.price > 0).sort((a, b) => a.productCode.localeCompare(b.productCode));
@@ -214,24 +221,35 @@ export const resolvers = {
         const product = await Product.findOne({ operatorId: item.operatorId, code: item.productCode }).lean();
         if (!product) throw new Error(`Product not found: ${item.operatorId}/${item.productCode}`);
 
-        // Find VMs with stock and deduct
+        // Find VMs with stock and deduct from stocks collection
         let remaining = item.qty;
         const vmsUsed = [];
 
-        const inventoryDocs = await VmInventory.find({
-          operatorId: item.operatorId,
-          productCode: item.productCode,
-          currentQty: { $gt: 0 },
-        }).sort({ currentQty: -1 });
+        // Find stocks docs for this operator that have this product
+        const stockDocs = await Stock.find({ operatorId: item.operatorId }).lean();
+        // Sort by available qty descending for this product
+        const candidates = [];
+        for (const s of stockDocs) {
+          if (!s.channels) continue;
+          for (const [chid, ch] of Object.entries(s.channels)) {
+            if (ch.p_id === item.productCode && (ch.quantity || 0) > 0) {
+              candidates.push({ stockId: s._id, vmid: s.vmid, chid, qty: ch.quantity });
+            }
+          }
+        }
+        candidates.sort((a, b) => b.qty - a.qty);
 
-        for (const inv of inventoryDocs) {
+        for (const cand of candidates) {
           if (remaining <= 0) break;
-          const take = Math.min(remaining, inv.currentQty);
-          await VmInventory.updateOne(
-            { _id: inv._id },
-            { $inc: { currentQty: -take }, $set: { updatedAt: new Date() } }
+          const take = Math.min(remaining, cand.qty);
+          await Stock.updateOne(
+            { _id: cand.stockId },
+            { $inc: { [`channels.${cand.chid}.quantity`]: -take }, $set: { updatedAt: new Date() } }
           );
-          vmsUsed.push({ vmid: inv.vmid, qty: take });
+          // Accumulate per vmid
+          const existing = vmsUsed.find(v => v.vmid === cand.vmid);
+          if (existing) existing.qty += take;
+          else vmsUsed.push({ vmid: cand.vmid, qty: take });
           remaining -= take;
         }
 

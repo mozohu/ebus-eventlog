@@ -1,5 +1,7 @@
 import { ApolloServer } from '@apollo/server';
-import { startStandaloneServer } from '@apollo/server/standalone';
+import { expressMiddleware } from '@apollo/server/express4';
+import express from 'express';
+import http from 'http';
 import mongoose from 'mongoose';
 import { authenticateRequest } from './auth.js';
 
@@ -13,11 +15,11 @@ import * as vms from './schema/vms.js';
 import * as products from './schema/products.js';
 import * as heartbeats from './schema/heartbeats.js';
 import * as presetStock from './schema/presetStock.js';
-import * as inventory from './schema/inventory.js';
+// inventory.js merged into stocks.js
+import * as stocks from './schema/stocks.js';
 import * as onlineOrders from './schema/onlineOrders.js';
 import * as tickets from './schema/tickets.js';
 import * as dailyStats from './schema/dailyStats.js';
-import * as stocks from './schema/stocks.js';
 import * as sessionTimeline from './schema/sessionTimeline.js';
 
 // ============================================================
@@ -95,6 +97,7 @@ const rootTypeDefs = `#graphql
 
     # ==================== Stocks ====================
     stock(deviceId: String!): Stock
+    stocks(deviceIds: [String!]): [Stock!]!
     # ==================== Heartbeats ====================
     heartbeats(deviceIds: [String!]): [Heartbeat!]!
     heartbeat(deviceId: String!): Heartbeat
@@ -106,7 +109,6 @@ const rootTypeDefs = `#graphql
 
     # ==================== Inventory ====================
     vmInventory(vmid: String!): [VmChannel!]!
-    replenishPicklist(vmid: String!): [PicklistItem!]!
     picklistSummary(vmids: [String!]): PicklistSummary!
 
     # ==================== Online Orders ====================
@@ -192,7 +194,7 @@ const typeDefs = [
   products.typeDefs, // types: Product, CreateProductInput, UpdateProductInput
   heartbeats.typeDefs, // types: Heartbeat
   presetStock.typeDefs, // types: PresetStockTemplate, PresetStockChannel
-  inventory.typeDefs, // types: VmChannel, PicklistItem, PicklistChannel
+  // inventory types moved to stocks.typeDefs
   onlineOrders.typeDefs, // types: OnlineOrder, ShopProduct
   tickets.typeDefs, // types: Ticket, TicketMessage, CreateTicketInput
   dailyStats.typeDefs, // types: DailyStatPoint, DailyStatDetail
@@ -233,7 +235,7 @@ deepMerge(resolvers, vms.resolvers);
 deepMerge(resolvers, products.resolvers);
 deepMerge(resolvers, heartbeats.resolvers);
 deepMerge(resolvers, presetStock.resolvers);
-deepMerge(resolvers, inventory.resolvers);
+// inventory resolvers moved to stocks.resolvers
 deepMerge(resolvers, onlineOrders.resolvers);
 deepMerge(resolvers, tickets.resolvers);
 deepMerge(resolvers, dailyStats.resolvers);
@@ -244,14 +246,42 @@ deepMerge(resolvers, sessionTimeline.resolvers);
 // Start server
 // ============================================================
 
-const server = new ApolloServer({ typeDefs, resolvers });
+import { handleUpload } from './upload.js';
 
-const { url } = await startStandaloneServer(server, {
-  listen: { port: parseInt(process.env.PORT) || 4000 },
+const apolloServer = new ApolloServer({ typeDefs, resolvers });
+await apolloServer.start();
+
+const app = express();
+
+// Upload endpoint (before body parsers — needs raw body for multipart)
+app.post('/upload/product-image', (req, res) => handleUpload(req, res));
+app.options('/upload/product-image', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.writeHead(204);
+  res.end();
+});
+
+// GraphQL
+app.use('/graphql', express.json(), expressMiddleware(apolloServer, {
   context: async ({ req }) => {
     const user = await authenticateRequest(req);
     return { user };
   },
-});
+}));
 
-console.log(`🚀 GraphQL API ready at ${url}`);
+// Also mount at root for backward compat (startStandaloneServer served at /)
+app.use('/', express.json(), expressMiddleware(apolloServer, {
+  context: async ({ req }) => {
+    const user = await authenticateRequest(req);
+    return { user };
+  },
+}));
+
+const PORT = parseInt(process.env.PORT) || 4000;
+const httpServer = http.createServer(app);
+httpServer.listen(PORT, () => {
+  console.log(`🚀 GraphQL API ready at http://localhost:${PORT}/`);
+  console.log(`📤 Upload endpoint at http://localhost:${PORT}/upload/product-image`);
+});
