@@ -111,6 +111,9 @@ export const typeDefs = `#graphql
     dispenseSuccess: Boolean
     dispenseChannel: String
     dispenseElapsed: Int
+    invoiceNo: String
+    invoiceRandom: String
+    refundStatus: String
   }
 `;
 
@@ -234,10 +237,15 @@ export const resolvers = {
         status: t.status,
         productName: t.payment?.hint?.p_name || null,
         price: t.payment?.hint?.price || null,
-        paymentMethod: t.arg?.method || null,
-        dispenseSuccess: t.dispense?.success || null,
+        paymentMethod: t.arg?.method || t.payment?.hint?.method || t.payment?.hint?.mid || null,
+        dispenseSuccess: t.dispense?.success ?? null,
         dispenseChannel: t.dispense?.ready?.chid || null,
         dispenseElapsed: t.dispense?.elapsed || null,
+        invoiceNo: t.invoice?.got_invoice_no?.eino || null,
+        invoiceRandom: t.invoice?.got_invoice_no?.rand || null,
+        refundStatus: t.payment?.refund?.success === true ? 'refunded'
+          : t.payment?.refund?.startedAt ? 'refund_pending'
+          : null,
       }));
     },
   },

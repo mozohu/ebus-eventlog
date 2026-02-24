@@ -21,6 +21,7 @@ import * as onlineOrders from './schema/onlineOrders.js';
 import * as tickets from './schema/tickets.js';
 import * as dailyStats from './schema/dailyStats.js';
 import * as sessionTimeline from './schema/sessionTimeline.js';
+import * as paymentMethods from './schema/paymentMethods.js';
 
 // ============================================================
 // MongoDB connection
@@ -200,6 +201,7 @@ const typeDefs = [
   dailyStats.typeDefs, // types: DailyStatPoint, DailyStatDetail
   stocks.typeDefs,
   sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
+  paymentMethods.typeDefs, // types: PaymentMethodEntry
   `#graphql
     input CreatePresetStockTemplateInput {
       operatorId: String!
@@ -241,6 +243,7 @@ deepMerge(resolvers, tickets.resolvers);
 deepMerge(resolvers, dailyStats.resolvers);
 deepMerge(resolvers, stocks.resolvers);
 deepMerge(resolvers, sessionTimeline.resolvers);
+deepMerge(resolvers, paymentMethods.resolvers);
 
 // ============================================================
 // Start server

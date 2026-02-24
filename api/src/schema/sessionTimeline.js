@@ -38,6 +38,10 @@ export const typeDefs = `#graphql
     paymentMethod: String
     dispenseSuccess: Boolean
     dispenseChannel: String
+    dispenseElapsed: Int
+    invoiceNo: String
+    invoiceRandom: String
+    refundStatus: String
   }
 
   type SessionTimeline {
@@ -56,7 +60,10 @@ export const resolvers = {
     async sessionTimeline(_, { txno }, { user }) {
       requireAuth(user);
       // Find transaction
-      const tx = await VendTransaction.findOne({ txno }).lean()
+      // txno may be string or number in MongoDB — query both forms to handle mixed types
+      const txnoNum = Number(txno)
+      const txQuery = isNaN(txnoNum) ? { txno } : { txno: { $in: [txno, txnoNum] } }
+      const tx = await VendTransaction.collection.findOne(txQuery)
       if (!tx) return null
 
       // Find session
@@ -97,6 +104,12 @@ export const resolvers = {
         paymentMethod: tx.arg?.method || '',
         dispenseSuccess: tx.dispense?.success ?? null,
         dispenseChannel: tx.dispense?.ready?.chid || '',
+        dispenseElapsed: tx.dispense?.elapsed || null,
+        invoiceNo: tx.invoice?.got_invoice_no?.eino || null,
+        invoiceRandom: tx.invoice?.got_invoice_no?.rand || null,
+        refundStatus: tx.payment?.refund?.success === true ? 'refunded'
+          : tx.payment?.refund?.startedAt ? 'refund_pending'
+          : null,
       }
 
       const sessionInfo = session ? {

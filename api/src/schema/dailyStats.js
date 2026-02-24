@@ -19,6 +19,7 @@ export const typeDefs = `#graphql
     revenue: Float!
     txCount: Int!
     successCount: Int!
+    byMethod: [MethodStat!]
   }
 
   type ProductStat {
@@ -31,6 +32,7 @@ export const typeDefs = `#graphql
   type MethodStat {
     method: String!
     count: Int!
+    revenue: Float
   }
 
   type DailyStatDetail {
@@ -60,19 +62,35 @@ export const resolvers = {
         if (to) filter.date.$lte = to
       }
 
-      // Aggregate across devices by date
-      const pipeline = [
-        { $match: filter },
-        { $group: {
-          _id: '$date',
-          revenue: { $sum: '$revenue' },
-          txCount: { $sum: '$txCount' },
-          successCount: { $sum: '$successCount' },
-        }},
-        { $sort: { _id: 1 } },
-        { $project: { _id: 0, date: '$_id', revenue: 1, txCount: 1, successCount: 1 } }
-      ]
-      return DailyStat.aggregate(pipeline)
+      // Fetch raw docs and merge by date (to preserve byMethod)
+      const docs = await DailyStat.find(filter).sort({ date: 1 }).lean()
+      const map = new Map()
+      for (const doc of docs) {
+        if (!map.has(doc.date)) {
+          map.set(doc.date, { date: doc.date, revenue: 0, txCount: 0, successCount: 0, byMethod: {} })
+        }
+        const m = map.get(doc.date)
+        m.revenue += doc.revenue || 0
+        m.txCount += doc.txCount || 0
+        m.successCount += doc.successCount || 0
+        if (doc.byMethod) {
+          for (const [method, val] of Object.entries(doc.byMethod)) {
+            if (!m.byMethod[method]) m.byMethod[method] = { count: 0, revenue: 0 }
+            if (typeof val === 'number') {
+              // Legacy format: byMethod.cash = 5 (count only)
+              m.byMethod[method].count += val
+            } else if (val && typeof val === 'object') {
+              // New format: byMethod.cash = { count, revenue }
+              m.byMethod[method].count += val.count || 0
+              m.byMethod[method].revenue += val.revenue || 0
+            }
+          }
+        }
+      }
+      return Array.from(map.values()).map(m => ({
+        ...m,
+        byMethod: Object.entries(m.byMethod).map(([method, v]) => ({ method, count: v.count, revenue: v.revenue })),
+      }))
     },
 
     async dailyStatsDetail(_, { deviceIds, from, to }, { user }) {
@@ -107,8 +125,14 @@ export const resolvers = {
         }
         // Merge byMethod
         if (doc.byMethod) {
-          for (const [method, count] of Object.entries(doc.byMethod)) {
-            m.byMethod[method] = (m.byMethod[method] || 0) + count
+          for (const [method, val] of Object.entries(doc.byMethod)) {
+            if (!m.byMethod[method]) m.byMethod[method] = { count: 0, revenue: 0 }
+            if (typeof val === 'number') {
+              m.byMethod[method].count += val
+            } else if (val && typeof val === 'object') {
+              m.byMethod[method].count += val.count || 0
+              m.byMethod[method].revenue += val.revenue || 0
+            }
           }
         }
       }
@@ -116,7 +140,7 @@ export const resolvers = {
       return Array.from(map.values()).map(m => ({
         ...m,
         byProduct: Object.values(m.byProduct),
-        byMethod: Object.entries(m.byMethod).map(([method, count]) => ({ method, count })),
+        byMethod: Object.entries(m.byMethod).map(([method, v]) => ({ method, count: v.count, revenue: v.revenue })),
       }))
     }
   }
