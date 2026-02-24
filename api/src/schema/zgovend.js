@@ -221,7 +221,8 @@ export const resolvers = {
     vendTransactionSummaries: async (_, args, { user }) => {
       requireAuth(user);
       const query = {};
-      if (args.deviceId) query.deviceId = args.deviceId;
+      if (args.deviceIds && args.deviceIds.length) query.deviceId = { $in: args.deviceIds };
+      else if (args.deviceId) query.deviceId = args.deviceId;
       if (args.status) query.status = args.status;
       if (args.from || args.to) {
         query.startedAt = {};
