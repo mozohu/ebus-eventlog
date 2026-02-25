@@ -66,6 +66,11 @@ export const typeDefs = `#graphql
     isAdmin: Boolean!
     operatorRoles: [OperatorRoleInput!]!
   }
+
+  """登入時自動註冊/更新自己的資料（不需 admin）"""
+  type LoginUserResult {
+    user: User!
+  }
 `;
 
 // ============================================================
@@ -124,6 +129,29 @@ export const resolvers = {
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
+    },
+
+    // 登入時自動註冊/更新自己（只需登入，不需 admin）
+    loginUser: async (_, _args, { user }) => {
+      requireAuth(user);
+      const doc = await User.findOneAndUpdate(
+        { lineUserId: user.lineUserId },
+        {
+          $set: {
+            displayName: user.displayName || '',
+            pictureUrl: user.pictureUrl || '',
+            lastLoginAt: new Date(),
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            createdAt: new Date(),
+            isAdmin: false,
+            operatorRoles: [],
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      return { user: doc };
     },
 
     updateUserOperatorRoles: async (_, { input }, { user }) => {

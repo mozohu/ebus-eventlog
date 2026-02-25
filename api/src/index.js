@@ -138,6 +138,8 @@ const rootTypeDefs = `#graphql
     # ==================== Users ====================
     upsertUser(input: UpsertUserInput!): User!
     updateUserOperatorRoles(input: UpdateUserOperatorRolesInput!): User
+    """登入時自動註冊/更新（不需 admin）"""
+    loginUser: LoginUserResult!
 
     # ==================== Operators ====================
     createOperator(input: CreateOperatorInput!): Operator!
@@ -250,6 +252,7 @@ deepMerge(resolvers, paymentMethods.resolvers);
 // ============================================================
 
 import { handleUpload } from './upload.js';
+import { attachTtsWebSocket } from './tts.js';
 
 const apolloServer = new ApolloServer({ typeDefs, resolvers });
 await apolloServer.start();
@@ -284,6 +287,8 @@ app.use('/', express.json(), expressMiddleware(apolloServer, {
 
 const PORT = parseInt(process.env.PORT) || 4000;
 const httpServer = http.createServer(app);
+attachTtsWebSocket(httpServer);
+
 httpServer.listen(PORT, () => {
   console.log(`🚀 GraphQL API ready at http://localhost:${PORT}/`);
   console.log(`📤 Upload endpoint at http://localhost:${PORT}/upload/product-image`);

@@ -88,6 +88,7 @@ export async function authenticateRequest(req) {
     const user = {
       lineUserId: profile.userId,
       displayName: profile.displayName,
+      pictureUrl: profile.pictureUrl || '',
       isAdmin: dbUser?.isAdmin || false,
       operatorRoles: dbUser?.operatorRoles || [],
     }
