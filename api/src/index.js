@@ -22,6 +22,7 @@ import * as tickets from './schema/tickets.js';
 import * as dailyStats from './schema/dailyStats.js';
 import * as sessionTimeline from './schema/sessionTimeline.js';
 import * as paymentMethods from './schema/paymentMethods.js';
+import * as invitations from './schema/invitations.js';
 
 // ============================================================
 // MongoDB connection
@@ -123,6 +124,9 @@ const rootTypeDefs = `#graphql
     myTickets(lineUserId: String!): [Ticket!]!
     ticket(ticketId: String!): Ticket
     operatorTickets(operatorId: String!, status: String): [Ticket!]!
+
+    # ==================== Invitations ====================
+    invitations: [Invitation!]!
   }
 
   type Mutation {
@@ -183,6 +187,12 @@ const rootTypeDefs = `#graphql
     createTicket(input: CreateTicketInput!): Ticket!
     replyTicket(ticketId: String!, from: String!, displayName: String!, text: String!): Ticket!
     updateTicketStatus(ticketId: String!, status: String!): Ticket!
+
+    # ==================== Invitations ====================
+    createInvitation(input: CreateInvitationInput): Invitation!
+    updateInvitation(input: UpdateInvitationInput!): Invitation!
+    deleteInvitation(id: ID!): Boolean!
+    redeemInvitation(code: String!): RedeemInvitationResult!
   }
 `;
 
@@ -204,6 +214,7 @@ const typeDefs = [
   stocks.typeDefs,
   sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
   paymentMethods.typeDefs, // types: PaymentMethodEntry
+  invitations.typeDefs, // types: Invitation, RedeemInvitationResult
   `#graphql
     input CreatePresetStockTemplateInput {
       operatorId: String!
@@ -246,6 +257,7 @@ deepMerge(resolvers, dailyStats.resolvers);
 deepMerge(resolvers, stocks.resolvers);
 deepMerge(resolvers, sessionTimeline.resolvers);
 deepMerge(resolvers, paymentMethods.resolvers);
+deepMerge(resolvers, invitations.resolvers);
 
 // ============================================================
 // Start server

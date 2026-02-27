@@ -1,0 +1,325 @@
+[
+  {
+    "id": "mqtt_broker",
+    "type": "mqtt-broker",
+    "name": "ebus-mosquitto",
+    "broker": "mosquitto",
+    "port": "1883",
+    "clientid": "nodered-ebus",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "closeTopic": "",
+    "willTopic": ""
+  },
+  {
+    "id": "mongo_config",
+    "type": "mongodb4-client",
+    "name": "ebus-mongo",
+    "protocol": "mongodb",
+    "hostname": "mongodb",
+    "port": "27017",
+    "dbName": "ebus",
+    "authSource": "admin",
+    "authMechanism": "DEFAULT",
+    "tls": false,
+    "advanced": "",
+    "uriTabActive": "tab-uri-simple"
+  },
+  {
+    "id": "tab_main",
+    "type": "tab",
+    "label": "MQTT \u2192 MongoDB",
+    "disabled": false
+  },
+  {
+    "id": "mqtt_trigger",
+    "type": "mqtt in",
+    "z": "tab_main",
+    "name": "MQTT trigger",
+    "topic": "devices/+/events/trigger",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "mqtt_broker",
+    "nl": false,
+    "rap": true,
+    "rh": "0",
+    "inputs": 0,
+    "x": 130,
+    "y": 100,
+    "wires": [
+      [
+        "parse_trigger"
+      ]
+    ]
+  },
+  {
+    "id": "parse_trigger",
+    "type": "function",
+    "z": "tab_main",
+    "name": "parse trigger",
+    "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[1];\nlet data = msg.payload;\nif (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch(e) { data = { raw: data }; }\n}\n// Preserve original receivedAt from replay events; fallback to now\nconst receivedAt = data.receivedAt ? new Date(data.receivedAt) : new Date();\nmsg.payload = {\n    deviceId: deviceId,\n    ...data,\n    receivedAt: receivedAt\n};\nmsg.collection = 'triggers';\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 330,
+    "y": 100,
+    "wires": [
+      [
+        "mongo_insert",
+        "debug_out",
+        "projector"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_transition",
+    "type": "mqtt in",
+    "z": "tab_main",
+    "name": "MQTT transition",
+    "topic": "devices/+/events/transition",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "mqtt_broker",
+    "nl": false,
+    "rap": true,
+    "rh": "0",
+    "inputs": 0,
+    "x": 140,
+    "y": 220,
+    "wires": [
+      [
+        "parse_transition"
+      ]
+    ]
+  },
+  {
+    "id": "parse_transition",
+    "type": "function",
+    "z": "tab_main",
+    "name": "parse transition",
+    "func": "const parts = msg.topic.split('/');\nconst deviceId = parts[1];\nlet data = msg.payload;\nif (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch(e) { data = { raw: data }; }\n}\nmsg.payload = {\n    deviceId: deviceId,\n    ...data,\n    receivedAt: new Date()\n};\nmsg.collection = 'transitions';\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 340,
+    "y": 220,
+    "wires": [
+      [
+        "mongo_insert",
+        "debug_out"
+      ]
+    ]
+  },
+  {
+    "id": "mongo_insert",
+    "type": "mongodb4",
+    "z": "tab_main",
+    "name": "Insert to MongoDB",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "insertOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 570,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "debug_out",
+    "type": "debug",
+    "z": "tab_main",
+    "name": "debug",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "payload.deviceId",
+    "statusType": "msg",
+    "x": 550,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "tab_projector",
+    "type": "tab",
+    "label": "Projector",
+    "disabled": false
+  },
+  {
+    "id": "projector",
+    "type": "function",
+    "z": "tab_projector",
+    "name": "projector",
+    "func": "const trigger = msg.payload;\nconst deviceId = trigger.deviceId;\nconst e = trigger.e || '';\nconst arg = trigger.arg || {};\nconst can = trigger.can;\nconst ts = trigger.timestamp || Date.now();\nconst receivedAt = trigger.receivedAt || new Date();\n\n// Skip invalid triggers (can:0)\nif (can === 0) return null;\n\n// Device state from flow context\nconst stateKey = 'dev_' + deviceId;\nlet state = flow.get(stateKey) || {};\n\nconst sm = e.split('/')[0];    // state machine name\nconst trig = e.split('/')[1];  // trigger name\n\nlet out_session = null;\nlet out_order = null;\nlet out_txn = null;\nlet out_stats = null;\nlet out_heartbeat = null;\nlet out_stock = null;\n\n// Helper: generate ID\nfunction genId(prefix) {\n    const sec = Math.floor(ts > 1e15 ? ts / 1e6 : ts > 1e12 ? ts / 1e3 : ts);\n    return prefix + '-' + sec;\n}\n\n// Helper: close current txno\nfunction closeTxno(reason) {\n    if (state.currentTxno) {\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: { endedAt: receivedAt, status: reason || 'closed' } }\n            ]\n        };\n        state.currentTxno = null;\n    }\n}\n\n// Helper: close current order\nfunction closeOrder(reason) {\n    closeTxno(reason);\n    if (state.currentOid) {\n        out_order = {\n            collection: 'orders',\n            operation: 'updateOne',\n            payload: [\n                { oid: state.currentOid, deviceId: deviceId },\n                { $set: { endedAt: receivedAt, status: reason || 'closed' } }\n            ]\n        };\n        state.currentOid = null;\n    }\n}\n\n// Helper: close session\nfunction closeSession(reason) {\n    closeOrder(reason);\n    if (state.currentSid) {\n        out_session = {\n            collection: 'sessions',\n            operation: 'updateOne',\n            payload: [\n                { sid: state.currentSid },\n                { $set: { endedAt: receivedAt, status: reason || 'ended' } }\n            ]\n        };\n        state.currentSid = null;\n    }\n}\n\nif (sm === 'sess' && trig === 'session_begin') {\n    // Close any existing session first\n    closeSession('superseded');\n    // New session\n    const sid = arg.sid || genId('sid');\n    state.currentSid = sid;\n    out_session = {\n        collection: 'sessions',\n        operation: 'updateOne',\n        payload: [\n            { sid: sid },\n            {\n                $set: { deviceId, sid, startedAt: receivedAt, status: 'active' },\n                $setOnInsert: { createdAt: new Date() }\n            }\n        ],\n        upsert: true\n    };\n}\nelse if (sm === 'order' && trig === 'ordered') {\n    // Close previous txno (new order = txno ends)\n    closeTxno('new_order');\n    // Supersede previous order\n    if (state.currentOid) {\n        out_order = {\n            collection: 'orders',\n            operation: 'updateOne',\n            payload: [\n                { oid: state.currentOid, deviceId: deviceId },\n                { $set: { superseded: true, supersededAt: receivedAt } }\n            ]\n        };\n    }\n    // New order\n    const oid = arg.oid || genId('oid');\n    state.currentOid = oid;\n    const newOrder = {\n        collection: 'orders',\n        operation: 'updateOne',\n        payload: [\n            { oid: oid },\n            {\n                $set: {\n                    deviceId, oid, sid: state.currentSid,\n                    orderedAt: receivedAt, arg: arg,\n                    superseded: false, status: 'active'\n                },\n                $setOnInsert: { createdAt: new Date() }\n            }\n        ],\n        upsert: true\n    };\n    // If we had a previous order to supersede, send both via array\n    if (out_order) {\n        // We need to send supersede first, then new order\n        // Use msg array for order output\n        out_order = [out_order, newOrder];\n    } else {\n        out_order = newOrder;\n    }\n}\nelse if (sm === 'order' && trig === 'hint') {\n    if (state.currentOid) {\n        const setObj = {};\n        for (const [k, v] of Object.entries(arg)) {\n            setObj['hints.' + k] = v;\n        }\n        setObj['hints.lastAt'] = receivedAt;\n        out_order = {\n            collection: 'orders',\n            operation: 'updateOne',\n            payload: [\n                { oid: state.currentOid },\n                { $set: setObj }\n            ]\n        };\n        // Cache paymentHint in state for later txno creation\n        state.pendingPaymentHint = Object.assign(state.pendingPaymentHint || {}, arg);\n    }\n}\nelse if (sm === 'payment' && trig === 'hint') {\n    if (state.currentTxno) {\n        const setObj = { 'payment.hintAt': receivedAt };\n        for (const [k, v] of Object.entries(arg)) {\n            setObj['payment.hint.' + k] = v;\n        }\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: setObj }\n            ]\n        };\n    } else if (state.currentOid) {\n        const setObj = {};\n        for (const [k, v] of Object.entries(arg)) {\n            setObj['paymentHint.' + k] = v;\n        }\n        out_order = {\n            collection: 'orders',\n            operation: 'updateOne',\n            payload: [\n                { oid: state.currentOid },\n                { $set: setObj }\n            ]\n        };\n        // Cache paymentHint in state for later txno creation\n        state.pendingPaymentHint = Object.assign(state.pendingPaymentHint || {}, arg);\n    }\n}\n\nelse if (sm === 'payment' && trig === 'input') {\n    // Record chosen payment method\n    if (arg.method) {\n        state.currentPaymentMethod = arg.method;\n    }\n    if (state.currentTxno) {\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: { 'arg.method': arg.method || state.currentPaymentMethod } }\n            ]\n        };\n    }\n}\nelse if (sm === 'payment' && trig === 'payment_begin') {\n    // New transaction\n    const txno = arg.txno || genId('txno');\n    state.currentTxno = txno;\n    state.currentPaymentMethod = (arg.method || 'unknown');\n    const txnSet = {\n        deviceId, txno,\n        sid: state.currentSid,\n        oid: state.currentOid,\n        startedAt: receivedAt, status: 'active', arg: arg\n    };\n    if (state.pendingPaymentHint) {\n        txnSet['payment.hint'] = state.pendingPaymentHint;\n        txnSet['payment.hintAt'] = receivedAt;\n        // Keep hint for daily_stats projection on dispense success\n    }\n    out_txn = {\n        collection: 'transactions',\n        operation: 'updateOne',\n        payload: [\n            { txno: txno },\n            {\n                $set: txnSet,\n                $setOnInsert: { createdAt: new Date() }\n            }\n        ],\n        upsert: true\n    };\n}\n\nelse if (sm === 'payment' && trig === 'paid') {\n    if (state.currentTxno) {\n        const update = { 'payment.paidAt': receivedAt };\n        for (const [k, v] of Object.entries(arg)) {\n            update['payment.hint.' + k] = v;\n        }\n        // Record method from arg if available\n        if (arg.method) {\n            state.currentPaymentMethod = arg.method;\n            update['arg.method'] = arg.method;\n        }\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: update }\n            ]\n        };\n        // Project daily stats on payment success\n        const evtDate = new Date(receivedAt);\n        const dateStr = evtDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });\n        const hint = state.pendingPaymentHint || {};\n        const price = hint.price || 0;\n        const pId = hint.p_id || 'unknown';\n        const pName = hint.p_name || '';\n        const method = state.currentPaymentMethod || 'unknown';\n        out_stats = {\n            collection: 'daily_stats',\n            operation: 'updateOne',\n            payload: [\n                { deviceId: deviceId, date: dateStr },\n                {\n                    $inc: {\n                        revenue: price,\n                        txCount: 1,\n                        ['byProduct.' + pId + '.qty']: 1,\n                        ['byProduct.' + pId + '.revenue']: price,\n                        ['byMethod.' + method + '.count']: 1,\n                            ['byMethod.' + method + '.revenue']: price\n                    },\n                    $set: {\n                        ['byProduct.' + pId + '.name']: pName,\n                        updatedAt: new Date()\n                    },\n                    $setOnInsert: { createdAt: new Date() }\n                }\n            ],\n            upsert: true\n        };\n    }\n}\nelse if (sm === 'dispense') {\n    if (state.currentTxno) {\n        const update = {};\n        if (trig === 'prod_dispensed') {\n            update['dispense.dispensedAt'] = receivedAt;\n            update['dispense.success'] = true;\n            // Increment successCount in daily_stats (revenue already counted on payment/paid)\n            const evtDate = new Date(receivedAt);\n            const dateStr = evtDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });\n            out_stats = {\n                collection: 'daily_stats',\n                operation: 'updateOne',\n                payload: [\n                    { deviceId: deviceId, date: dateStr },\n                    {\n                        $inc: { successCount: 1 },\n                        $set: { updatedAt: new Date() },\n                        $setOnInsert: { createdAt: new Date() }\n                    }\n                ],\n                upsert: true\n            };\n        } else if (trig === 'hint' && arg.final) {\n            update['dispense.finalHint'] = arg.info || '';\n        } else if (trig === 'hint' && arg.elapsed !== undefined) {\n            update['dispense.elapsed'] = arg.elapsed;\n        } else if (trig === 'failed' || trig === 'error') {\n            update['dispense.success'] = false;\n            update['dispense.error'] = arg;\n            update['status'] = 'dispense_failed';\n        } else {\n            update['dispense.' + trig] = arg;\n        }\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: update }\n            ]\n        };\n    }\n}\nelse if (sm === 'invoice') {\n    if (state.currentTxno) {\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: { ['invoice.' + trig]: arg, ['invoice.updatedAt']: receivedAt } }\n            ]\n        };\n    }\n}\n\nelse if (sm === 'payment' && (trig === 'before_refund' || trig === 'after_refund')) {\n    if (state.currentTxno || arg.txno) {\n        const txno = state.currentTxno || Number(arg.txno) || arg.txno;\n        const update = {};\n        if (trig === 'before_refund') {\n            update['payment.refund'] = { startedAt: receivedAt };\n        } else if (trig === 'after_refund') {\n            update['payment.refund.completedAt'] = receivedAt;\n            update['payment.refund.success'] = true;\n            update['payment.refund.arg'] = arg;\n        }\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: txno },\n                { $set: update }\n            ]\n        };\n    }\n}\nelse if (sm === 'payment' && (trig === 'cancelled' || trig === 'timeout')) {\n    if (state.currentTxno) {\n        out_txn = {\n            collection: 'transactions',\n            operation: 'updateOne',\n            payload: [\n                { txno: state.currentTxno },\n                { $set: { status: trig, endedAt: receivedAt } }\n            ]\n        };\n        state.currentTxno = null;\n    }\n}\nelse if (sm === 'sess' && trig === 'timeout') {\n    closeSession('timeout');\n}\n\n\n// \u2500\u2500 tempreport \u2192 tempreports \u2500\u2500\nif (sm === 'sys' && trig === 'hint' && arg.tempreport) {\n    const tr = arg.tempreport;\n    let temp = null;\n    if (tr.t !== undefined && tr.t !== null && tr.t !== '') temp = Number(tr.t);\n    else if (tr.box_temp !== undefined && tr.box_temp !== null) temp = Number(tr.box_temp);\n    else if (tr.temp_val !== undefined && tr.temp_val !== null) temp = Number(tr.temp_val);\n    else if (tr.cabin_temp !== undefined && tr.cabin_temp !== null) {\n        temp = Number(tr.cabin_temp);\n        if (tr.cabin_temp_sign === '-') temp = -temp;\n    }\n    if (temp !== null && isNaN(temp)) temp = null;\n    out_heartbeat = {\n        collection: 'tempreports',\n        payload: {\n            deviceId, temperature: temp,\n            payload: tr, receivedAt\n        }\n    };\n}\n\n// \u2500\u2500 heartbeat \u2500\u2500\nelse if (sm === 'sys' && trig === 'hint' && arg.heartbeat) {\n    const hb = arg.heartbeat;\n    const ev = (hb.events && hb.events[0]) || {};\n    out_heartbeat = {\n        collection: 'heartbeats',\n        payload: {\n            deviceId,\n            status: ev.status || null,\n            stat: ev.stat || null,\n            content: ev.content || null,\n            occurredAt: ev.occurred_at || null,\n            payload: hb,\n            receivedAt\n        }\n    };\n}\n\n// \u2500\u2500 stock projection \u2500\u2500\nif (sm === 'sys' && trig === 'set' && arg.act === 'update_stock' && arg.set) {\n    const setObj = { updatedAt: receivedAt };\n    for (const [chid, ch] of Object.entries(arg.set)) {\n        setObj['channels.' + chid] = {\n            p_id: ch.p_id || '', quantity: Number(ch.quantity) || 0, max: Number(ch.max) || 0\n        };\n    }\n    out_stock = {\n        collection: 'stocks',\n        operation: 'updateOne',\n        payload: [\n            { deviceId },\n            { $set: setObj, $setOnInsert: { createdAt: new Date() } }\n        ],\n        upsert: true\n    };\n}\nelse if (sm === 'dispense' && trig === 'prod_dispensed' && arg.chid) {\n    out_stock = {\n        collection: 'stocks',\n        operation: 'updateOne',\n        payload: [\n            { deviceId },\n            { $inc: { ['channels.' + arg.chid + '.quantity']: -1 }, $set: { updatedAt: receivedAt } }\n        ]\n    };\n}\nelse if (sm === 'sys' && trig === 'hint' && arg.stock_report) {\n    // auto_snapshot stock report \u2014 full stock sync\n    const setObj = { updatedAt: receivedAt };\n    for (const [chid, ch] of Object.entries(arg.stock_report)) {\n        setObj['channels.' + chid] = {\n            p_id: ch.p_id || '', quantity: Number(ch.quantity) || 0, max: Number(ch.max) || 0\n        };\n    }\n    out_stock = {\n        collection: 'stocks',\n        operation: 'updateOne',\n        payload: [\n            { deviceId },\n            { $set: setObj, $setOnInsert: { createdAt: new Date() } }\n        ],\n        upsert: true\n    };\n}\nelse if (sm === 'sys' && trig === 'hint' && arg.stock_updated) {\n    // set_channel.cgi stock update \u2014 partial stock sync\n    const setObj = { updatedAt: receivedAt };\n    for (const [chid, ch] of Object.entries(arg.stock_updated)) {\n        setObj['channels.' + chid] = {\n            p_id: ch.p_id || '', quantity: Number(ch.quantity) || 0, max: Number(ch.max) || 0\n        };\n    }\n    out_stock = {\n        collection: 'stocks',\n        operation: 'updateOne',\n        payload: [\n            { deviceId },\n            { $set: setObj, $setOnInsert: { createdAt: new Date() } }\n        ],\n        upsert: true\n    };\n}\n\n// Save state\nflow.set(stateKey, state);\n\n// Build output messages for 3 outputs: [sessions, orders, transactions]\nfunction buildMsg(data) {\n    if (!data) return null;\n    if (Array.isArray(data)) {\n        return data.map(d => {\n            const m = { collection: d.collection, payload: d.payload };\n            if (d.upsert) m.payload = [...d.payload, { upsert: true }];\n            return m;\n        });\n    }\n    const m = { collection: data.collection, payload: data.payload };\n    if (data.upsert) m.payload = [...data.payload, { upsert: true }];\n    return m;\n}\n\nreturn [buildMsg(out_session), buildMsg(out_order), buildMsg(out_txn), buildMsg(out_stats), buildMsg(out_heartbeat), buildMsg(out_stock)];",
+    "outputs": 6,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 350,
+    "y": 160,
+    "wires": [
+      [
+        "proj_mongo_session"
+      ],
+      [
+        "proj_mongo_order"
+      ],
+      [
+        "proj_mongo_txn"
+      ],
+      [
+        "proj_mongo_stats"
+      ],
+      [
+        "proj_mongo_heartbeat"
+      ],
+      [
+        "proj_mongo_stock"
+      ]
+    ]
+  },
+  {
+    "id": "proj_mongo_session",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Upsert sessions",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "updateOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "proj_mongo_order",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Upsert orders",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "updateOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "proj_mongo_txn",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Upsert transactions",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "updateOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "proj_debug",
+    "type": "debug",
+    "z": "tab_projector",
+    "name": "projector debug",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "proj_mongo_stats",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Upsert daily_stats",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "updateOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 300,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "proj_mongo_heartbeat",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Insert heartbeats",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "insertOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 380,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "proj_mongo_stock",
+    "type": "mongodb4",
+    "z": "tab_projector",
+    "name": "Upsert stocks",
+    "clientNode": "mongo_config",
+    "mode": "collection",
+    "collection": "",
+    "operation": "updateOne",
+    "output": "toArray",
+    "maxTimeMS": "0",
+    "handleDocId": false,
+    "x": 600,
+    "y": 460,
+    "wires": [
+      []
+    ]
+  }
+]
