@@ -23,6 +23,7 @@ import * as dailyStats from './schema/dailyStats.js';
 import * as sessionTimeline from './schema/sessionTimeline.js';
 import * as paymentMethods from './schema/paymentMethods.js';
 import * as invitations from './schema/invitations.js';
+import * as agentNotifications from './schema/agentNotifications.js';
 
 // ============================================================
 // MongoDB connection
@@ -125,6 +126,9 @@ const rootTypeDefs = `#graphql
     ticket(ticketId: String!): Ticket
     operatorTickets(operatorId: String!, status: String): [Ticket!]!
 
+    # ==================== Agent Notifications ====================
+    agentNotifications(agentId: String, level: String, limit: Int): [AgentNotification!]!
+
     # ==================== Invitations ====================
     invitations: [Invitation!]!
   }
@@ -188,6 +192,9 @@ const rootTypeDefs = `#graphql
     replyTicket(ticketId: String!, from: String!, displayName: String!, text: String!): Ticket!
     updateTicketStatus(ticketId: String!, status: String!): Ticket!
 
+    # ==================== Agent Notifications ====================
+    agentNotifications(agentId: String, level: String, limit: Int): [AgentNotification!]!
+
     # ==================== Invitations ====================
     createInvitation(input: CreateInvitationInput): Invitation!
     updateInvitation(input: UpdateInvitationInput!): Invitation!
@@ -215,6 +222,7 @@ const typeDefs = [
   sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
   paymentMethods.typeDefs, // types: PaymentMethodEntry
   invitations.typeDefs, // types: Invitation, RedeemInvitationResult
+  agentNotifications.typeDefs, // types: AgentNotification
   `#graphql
     input CreatePresetStockTemplateInput {
       operatorId: String!
@@ -258,6 +266,7 @@ deepMerge(resolvers, stocks.resolvers);
 deepMerge(resolvers, sessionTimeline.resolvers);
 deepMerge(resolvers, paymentMethods.resolvers);
 deepMerge(resolvers, invitations.resolvers);
+deepMerge(resolvers, agentNotifications.resolvers);
 
 // ============================================================
 // Start server
