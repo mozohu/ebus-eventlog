@@ -127,7 +127,8 @@ const rootTypeDefs = `#graphql
     operatorTickets(operatorId: String!, status: String): [Ticket!]!
 
     # ==================== Agent Notifications ====================
-    agentNotifications(agentId: String, level: String, limit: Int): [AgentNotification!]!
+    agentChatLogs(channel: String, type: String, limit: Int): [AgentChatLog!]!
+    agentNotifications(agentId: String, level: String, limit: Int): [AgentChatLog!]!
 
     # ==================== Invitations ====================
     invitations: [Invitation!]!
@@ -192,9 +193,6 @@ const rootTypeDefs = `#graphql
     replyTicket(ticketId: String!, from: String!, displayName: String!, text: String!): Ticket!
     updateTicketStatus(ticketId: String!, status: String!): Ticket!
 
-    # ==================== Agent Notifications ====================
-    agentNotifications(agentId: String, level: String, limit: Int): [AgentNotification!]!
-
     # ==================== Invitations ====================
     createInvitation(input: CreateInvitationInput): Invitation!
     updateInvitation(input: UpdateInvitationInput!): Invitation!
@@ -222,7 +220,7 @@ const typeDefs = [
   sessionTimeline.typeDefs, // types: SessionTimeline, TimelineEvent, SessionInfo, TransactionInfo
   paymentMethods.typeDefs, // types: PaymentMethodEntry
   invitations.typeDefs, // types: Invitation, RedeemInvitationResult
-  agentNotifications.typeDefs, // types: AgentNotification
+  agentNotifications.typeDefs, // types: AgentChatLog
   `#graphql
     input CreatePresetStockTemplateInput {
       operatorId: String!

@@ -1,51 +1,51 @@
 import mongoose from 'mongoose';
 
-// agent_notifications — Agent 通報紀錄 (MQTT agents/+/notify → Node-RED → MongoDB)
+// agent_chat_logs — P2P 通訊紀錄 (MQTT agents/p2p/{channel}/{type} → Node-RED → MongoDB)
 const schema = new mongoose.Schema({
-  agentId: { type: String, required: true, index: true },
-  level: { type: String, default: 'info' },      // info, warn, error, critical
-  title: { type: String, default: '' },
-  message: { type: String, default: '' },
-  tags: { type: [String], default: [] },
-  meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  topic: { type: String },
+  channel: { type: String, required: true, index: true },
+  type: { type: String, default: 'unknown' },
+  ts: { type: Date, default: Date.now },
+  payload: { type: mongoose.Schema.Types.Mixed, default: {} },
   createdAt: { type: Date, default: Date.now },
-}, { collection: 'agent_notifications' });
+}, { collection: 'agent_chat_logs' });
 
-schema.index({ agentId: 1, createdAt: -1 });
-schema.index({ createdAt: -1 });
-schema.index({ level: 1 });
+schema.index({ channel: 1, ts: -1 });
+schema.index({ ts: -1 });
+schema.index({ channel: 1, type: 1 });
 
-const AgentNotification = mongoose.model('AgentNotification', schema);
+const AgentChatLog = mongoose.model('AgentChatLog', schema);
 
 export const typeDefs = `#graphql
-  type AgentNotification {
+  type AgentChatLog {
     id: ID!
-    agentId: String!
-    level: String!
-    title: String
-    message: String
-    tags: [String!]
-    meta: JSON
+    channel: String!
+    type: String!
+    ts: String!
+    payload: JSON
     createdAt: String!
   }
 `;
 
 export const resolvers = {
-  AgentNotification: {
+  AgentChatLog: {
     id: (p) => p._id.toString(),
-    createdAt: (p) => p.createdAt instanceof Date
-      ? p.createdAt.toISOString()
-      : (p.createdAt ? new Date(p.createdAt).toISOString() : null),
+    ts: (p) => p.ts instanceof Date ? p.ts.toISOString() : (p.ts ? new Date(p.ts).toISOString() : null),
+    createdAt: (p) => p.createdAt instanceof Date ? p.createdAt.toISOString() : (p.createdAt ? new Date(p.createdAt).toISOString() : null),
   },
 
   Query: {
-    agentNotifications: async (_, { agentId, level, limit }) => {
+    agentChatLogs: async (_, { channel, type, limit }) => {
       const match = {};
-      if (agentId) match.agentId = agentId;
-      if (level) match.level = level;
-      return AgentNotification.find(match)
-        .sort({ createdAt: -1 })
-        .limit(limit || 50);
+      if (channel) match.channel = channel;
+      if (type) match.type = type;
+      return AgentChatLog.find(match).sort({ ts: -1 }).limit(limit || 50);
+    },
+    agentNotifications: async (_, { agentId, level, limit }) => {
+      const match = { type: 'notify' };
+      if (agentId) match.channel = { $regex: agentId };
+      if (level) match['payload.level'] = level;
+      return AgentChatLog.find(match).sort({ ts: -1 }).limit(limit || 50);
     },
   },
 };

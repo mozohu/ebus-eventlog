@@ -386,17 +386,17 @@
     ]
   },
   {
-    "id": "tab_agent_notify",
+    "id": "tab_p2p",
     "type": "tab",
-    "label": "Agent Notifications",
+    "label": "Agent P2P Log",
     "disabled": false
   },
   {
-    "id": "mqtt_agent_notify",
+    "id": "mqtt_p2p",
     "type": "mqtt in",
-    "z": "tab_agent_notify",
-    "name": "Agent Notify",
-    "topic": "agents/+/notify",
+    "z": "tab_p2p",
+    "name": "P2P messages",
+    "topic": "agents/p2p/+/+",
     "qos": "1",
     "datatype": "json",
     "broker": "mqtt_broker",
@@ -408,36 +408,36 @@
     "y": 100,
     "wires": [
       [
-        "parse_agent_notify"
+        "parse_p2p"
       ]
     ]
   },
   {
-    "id": "parse_agent_notify",
+    "id": "parse_p2p",
     "type": "function",
-    "z": "tab_agent_notify",
-    "name": "parse notification",
-    "func": "const parts = msg.topic.split('/');\nconst agentId = parts[1];\nlet data = msg.payload;\nif (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch(e) { data = { text: data }; }\n}\nmsg.payload = {\n    agentId: agentId,\n    level: data.level || 'info',\n    title: data.title || '',\n    message: data.message || data.text || '',\n    tags: data.tags || [],\n    meta: data.meta || {},\n    createdAt: new Date()\n};\nmsg.collection = 'agent_notifications';\nreturn msg;",
+    "z": "tab_p2p",
+    "name": "parse P2P",
+    "func": "const parts = msg.topic.split('/');\n// agents/p2p/{channel}/{type}\nconst channel = parts[2] || 'unknown';\nconst type = parts[3] || 'unknown';\nlet data = msg.payload;\nif (typeof data === 'string') {\n    try { data = JSON.parse(data); } catch(e) { data = { raw: data }; }\n}\nmsg.payload = {\n    topic: msg.topic,\n    channel: channel,\n    type: type,\n    ts: new Date(data.ts || Date.now()),\n    payload: data,\n    createdAt: new Date()\n};\nmsg.collection = 'agent_chat_logs';\nreturn msg;",
     "outputs": 1,
     "timeout": "",
     "noerr": 0,
     "initialize": "",
     "finalize": "",
     "libs": [],
-    "x": 350,
+    "x": 330,
     "y": 100,
     "wires": [
       [
-        "mongo_agent_notify",
-        "debug_agent_notify"
+        "mongo_p2p",
+        "debug_p2p"
       ]
     ]
   },
   {
-    "id": "mongo_agent_notify",
+    "id": "mongo_p2p",
     "type": "mongodb4",
-    "z": "tab_agent_notify",
-    "name": "Insert notification",
+    "z": "tab_p2p",
+    "name": "Insert chat log",
     "clientNode": "mongo_config",
     "mode": "collection",
     "collection": "",
@@ -445,26 +445,26 @@
     "output": "toArray",
     "maxTimeMS": "0",
     "handleDocId": false,
-    "x": 590,
+    "x": 570,
     "y": 80,
     "wires": [
       []
     ]
   },
   {
-    "id": "debug_agent_notify",
+    "id": "debug_p2p",
     "type": "debug",
-    "z": "tab_agent_notify",
-    "name": "notify debug",
+    "z": "tab_p2p",
+    "name": "p2p debug",
     "active": true,
     "tosidebar": true,
     "console": false,
     "tostatus": true,
     "complete": "payload",
     "targetType": "msg",
-    "statusVal": "payload.agentId",
+    "statusVal": "payload.channel",
     "statusType": "msg",
-    "x": 590,
+    "x": 570,
     "y": 160,
     "wires": []
   }
