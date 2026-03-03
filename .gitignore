@@ -4,3 +4,6 @@ node_modules/
 
 # Node-RED credentials (contains MongoDB password)
 nodered/flows_cred.json
+
+# Mosquitto password file (contains hashed credentials)
+mosquitto/config/pwfile

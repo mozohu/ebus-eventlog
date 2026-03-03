@@ -24,6 +24,7 @@ import * as sessionTimeline from './schema/sessionTimeline.js';
 import * as paymentMethods from './schema/paymentMethods.js';
 import * as invitations from './schema/invitations.js';
 import * as agentNotifications from './schema/agentNotifications.js';
+import * as operationalEvents from './schema/operationalEvents.js';
 
 // ============================================================
 // MongoDB connection
@@ -105,6 +106,9 @@ const rootTypeDefs = `#graphql
     heartbeats(deviceIds: [String!]): [Heartbeat!]!
     heartbeat(deviceId: String!): Heartbeat
     tempHistory(deviceId: String!, limit: Int): [TemperatureRecord!]!
+    tempBuckets(deviceId: String!, scale: String!): [TempBucket!]!
+    latestTemps: [LatestTemp!]!
+    operationalEvents(operatorId: String!, deviceId: String, types: [String], from: String, to: String, limit: Int, offset: Int): [OperationalEvent!]!
 
     # ==================== Preset Stock ====================
     presetStockTemplates(operatorId: String, status: String): [PresetStockTemplate!]!
@@ -221,6 +225,7 @@ const typeDefs = [
   paymentMethods.typeDefs, // types: PaymentMethodEntry
   invitations.typeDefs, // types: Invitation, RedeemInvitationResult
   agentNotifications.typeDefs, // types: AgentChatLog
+  operationalEvents.typeDefs,
   `#graphql
     input CreatePresetStockTemplateInput {
       operatorId: String!
@@ -265,6 +270,7 @@ deepMerge(resolvers, sessionTimeline.resolvers);
 deepMerge(resolvers, paymentMethods.resolvers);
 deepMerge(resolvers, invitations.resolvers);
 deepMerge(resolvers, agentNotifications.resolvers);
+deepMerge(resolvers, operationalEvents.resolvers);
 
 // ============================================================
 // Start server

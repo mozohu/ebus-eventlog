@@ -27,6 +27,13 @@ tempreportSchema.index({ deviceId: 1, receivedAt: -1 });
 
 const Tempreport = mongoose.model('Tempreport', tempreportSchema);
 
+// scale → collection mapping for temperature buckets
+const scaleCollections = {
+  day: 'temp_5min',
+  week: 'temp_30min',
+  month: 'temp_2hr',
+};
+
 export const typeDefs = `#graphql
   type Heartbeat {
     id: ID!
@@ -44,6 +51,20 @@ export const typeDefs = `#graphql
     deviceId: String!
     temperature: Float
     receivedAt: String
+  }
+
+  type LatestTemp {
+    deviceId: String!
+    temperature: Float
+  }
+
+  type TempBucket {
+    bucket: String!
+    deviceId: String!
+    avgTemp: Float
+    minTemp: Float
+    maxTemp: Float
+    count: Int
   }
 
   input CreateHeartbeatInput {
@@ -84,6 +105,19 @@ export const resolvers = {
     },
     tempHistory: async (_, { deviceId, limit }) => {
       return Tempreport.find({ deviceId }).sort({ receivedAt: -1 }).limit(limit || 1440);
+    },
+    latestTemps: async () => {
+      return Tempreport.aggregate([
+        { $sort: { receivedAt: -1 } },
+        { $group: { _id: '$deviceId', doc: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $project: { deviceId: 1, temperature: 1 } },
+      ]);
+    },
+    tempBuckets: async (_, { deviceId, scale }) => {
+      const collName = scaleCollections[scale] || 'temp_5min';
+      const coll = mongoose.connection.db.collection(collName);
+      return coll.find({ deviceId }).sort({ bucket: 1 }).toArray();
     },
   },
 
